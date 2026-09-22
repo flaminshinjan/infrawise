@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useLab } from "../hooks/useLab.js";
 import { DeviceViewport } from "../components/DeviceViewport.js";
+import { ChatPane } from "../components/ChatPane.js";
+import type { LabConnection, LabState } from "../lib/connection.js";
 
 function useNow(intervalMs: number): number {
   const [now, setNow] = useState(Date.now());
@@ -18,148 +20,243 @@ function formatDuration(ms: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export function App() {
-  const { lab, state } = useLab();
-  const now = useNow(1000);
-  const [text, setText] = useState("");
+function Mark() {
+  return (
+    <svg className="mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="2" y="2" width="28" height="28" rx="8" fill="#0435DD" />
+      <rect
+        x="11"
+        y="7"
+        width="10"
+        height="18"
+        rx="2.5"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="2"
+      />
+      <circle cx="16" cy="21.5" r="1.4" fill="#fff" />
+    </svg>
+  );
+}
 
-  const pool = state.pool;
-  const poolLine = pool
-    ? `${pool.available} available · ${pool.inUse + pool.reserved} active · ${pool.cleaning} cleaning · ${pool.offline} offline`
-    : "…";
-
-  const connBadge =
-    state.connection === "connected" ? (
-      <span className="badge ok">connected</span>
-    ) : state.connection === "reconnecting" ? (
+function ConnectionBadge({ state }: { state: LabState }) {
+  if (state.connection === "connected")
+    return <span className="badge ok">● connected</span>;
+  if (state.connection === "reconnecting")
+    return (
       <span className="badge warn">
-        reconnecting — holding your session for 15s
+        reconnecting — holding your spot for 15 s
       </span>
-    ) : (
-      <span className="badge">connecting…</span>
     );
+  return <span className="badge">connecting…</span>;
+}
+
+function PoolPill({ state }: { state: LabState }) {
+  const pool = state.pool;
+  if (!pool) return null;
+  return (
+    <span className="pool-pill">
+      <span className="dot free" /> {pool.available} free
+      <span className="dot busy" /> {pool.inUse + pool.reserved} in use
+      {pool.offline > 0 && (
+        <>
+          <span className="dot off" /> {pool.offline} offline
+        </>
+      )}
+    </span>
+  );
+}
+
+function Landing({ lab, state }: { lab: LabConnection; state: LabState }) {
+  const now = useNow(1000);
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div>
-          <h1>Shared Device Lab</h1>
-          <p className="subtitle">
-            Three Android devices. Fair leases. Live control.
+    <div className="landing">
+      <nav className="nav">
+        <div className="nav-brand">
+          <Mark />
+          <span className="brand-name">Shared Device Lab</span>
+        </div>
+        <div className="nav-right">
+          <PoolPill state={state} />
+          <ConnectionBadge state={state} />
+        </div>
+      </nav>
+
+      <main className="hero">
+        <span className="eyebrow">An execution substrate for agentic QA</span>
+        <h1>
+          Real Android devices,
+          <br />
+          <em>leased fairly</em>, tested live.
+        </h1>
+        <p className="hero-sub">
+          Request a device and get an exclusive, crash-safe lease on a live
+          Android emulator — streamed to your browser, driven by touch or by
+          plain-language test steps. When you’re done, the next person in line
+          takes over automatically.
+        </p>
+
+        <div className="hero-action">
+          {state.phase === "idle" && (
+            <>
+              <button className="cta" onClick={() => void lab.requestDevice()}>
+                Request a device
+              </button>
+              <span className="cta-note">
+                Fair FIFO queue · 10-minute lease · no sign-up
+              </span>
+            </>
+          )}
+
+          {state.phase === "waiting" && (
+            <div className="queue-card">
+              <div className="queue-num">{state.position ?? "…"}</div>
+              <div className="queue-info">
+                <strong>
+                  {state.position === 1
+                    ? "You’re next"
+                    : `${(state.position ?? 1) - 1} ahead of you`}
+                </strong>
+                <span>
+                  waiting{" "}
+                  {state.enqueuedAt
+                    ? formatDuration(now - state.enqueuedAt)
+                    : "…"}{" "}
+                  — your spot survives refreshes
+                </span>
+              </div>
+              <button
+                className="ghost"
+                onClick={() => void lab.cancelRequest()}
+              >
+                Leave queue
+              </button>
+            </div>
+          )}
+
+          {state.phase === "reserved" && (
+            <div className="queue-card">
+              <span className="spinner" />
+              <div className="queue-info">
+                <strong>Device reserved</strong>
+                <span>claiming your session…</span>
+              </div>
+            </div>
+          )}
+
+          {state.phase === "ended" && (
+            <div className="queue-card ended">
+              <div className="queue-info">
+                <strong>Session ended</strong>
+                <span>reason: {state.endedReason ?? "unknown"}</span>
+              </div>
+              <button
+                className="cta small"
+                onClick={() => void lab.requestDevice()}
+              >
+                Request again
+              </button>
+            </div>
+          )}
+        </div>
+
+        {state.lastError && <div className="hero-error">{state.lastError}</div>}
+      </main>
+
+      <section className="features">
+        <div className="feature">
+          <h3>Fair, atomic leases</h3>
+          <p>
+            One Redis transaction assigns each device — two clients can never
+            own the same one. FIFO order with live queue positions, no jumping
+            the line.
           </p>
         </div>
-        <div className="topbar-right">
-          {connBadge}
-          <span className="pool">{poolLine}</span>
+        <div className="feature">
+          <h3>Crash-safe ownership</h3>
+          <p>
+            Leases expire, fencing tokens advance, and devices are cleaned
+            before reassignment — even after a <code>kill&nbsp;-9</code>.
+            Refreshing your tab keeps your session.
+          </p>
+        </div>
+        <div className="feature">
+          <h3>Test in plain language</h3>
+          <p>
+            A chat console compiles sentences like “open notifications, then
+            type hello” into ordered, acknowledged device input — the same
+            protocol an agent would drive.
+          </p>
+        </div>
+      </section>
+
+      <footer className="footer">
+        <span>33 fps live stream</span>
+        <span className="sep" />
+        <span>97 ms tap-to-pixel (p50)</span>
+        <span className="sep" />
+        <span>11 ms allocation</span>
+        <span className="sep" />
+        <span>measured, not estimated — see the repo README</span>
+      </footer>
+    </div>
+  );
+}
+
+function Workspace({ lab, state }: { lab: LabConnection; state: LabState }) {
+  const now = useNow(1000);
+  const session = state.session!;
+  return (
+    <div className="workspace">
+      <header className="ws-bar">
+        <div className="nav-brand">
+          <Mark />
+          <span className="brand-name">Shared Device Lab</span>
+        </div>
+        <div className="ws-meta">
+          <span className="ws-device">{session.device.deviceId}</span>
+          <span className="ws-dim">
+            {session.device.width}×{session.device.height}
+          </span>
+          <span className="ws-stat">{state.fps} fps</span>
+          {state.inputRttMs !== null && (
+            <span className="ws-stat">{state.inputRttMs} ms input</span>
+          )}
+          <span className="ws-countdown">
+            {formatDuration(session.expiresAt - now)} left
+          </span>
+        </div>
+        <div className="ws-right">
+          <ConnectionBadge state={state} />
+          <button className="ghost danger" onClick={() => lab.endSession()}>
+            End session
+          </button>
         </div>
       </header>
 
-      {state.lastError && <div className="error-bar">{state.lastError}</div>}
-
-      {state.phase === "idle" && (
-        <main className="center-card">
-          <button className="primary" onClick={() => void lab.requestDevice()}>
-            Request a device
-          </button>
-          <p className="hint">
-            You’ll get an exclusive lease on one of the lab’s Android emulators.
-          </p>
-        </main>
-      )}
-
-      {state.phase === "waiting" && (
-        <main className="center-card">
-          <div className="queue-position">{state.position ?? "…"}</div>
-          <p className="queue-copy">
-            {state.position === 1
-              ? "You’re next"
-              : `${(state.position ?? 1) - 1} ahead of you`}
-          </p>
-          {state.enqueuedAt && (
-            <p className="hint">
-              waiting {formatDuration(now - state.enqueuedAt)}
-            </p>
-          )}
-          <button
-            className="secondary"
-            onClick={() => void lab.cancelRequest()}
-          >
-            Cancel
-          </button>
-        </main>
-      )}
-
-      {state.phase === "reserved" && (
-        <main className="center-card">
-          <div className="spinner" />
-          <p className="queue-copy">Device reserved — claiming…</p>
-        </main>
-      )}
-
-      {state.phase === "active" && state.session && (
-        <main className="active-layout">
-          <div className="session-bar">
-            <span className="device-id">
-              {state.session.device.deviceId} · {state.session.device.width}×
-              {state.session.device.height}
-            </span>
-            <span className="countdown">
-              ends in {formatDuration(state.session.expiresAt - now)}
-            </span>
-            <span className="stats">
-              {state.fps} fps
-              {state.frameLatencyMs !== null &&
-                ` · frame ${state.frameLatencyMs}ms`}
-              {state.inputRttMs !== null && ` · input ${state.inputRttMs}ms`}
-            </span>
-          </div>
+      <div className="ws-body">
+        <ChatPane lab={lab} sessionKey={session.sessionId} />
+        <div className="ws-device-col">
           <DeviceViewport
             lab={lab}
-            deviceWidth={state.session.device.width}
-            deviceHeight={state.session.device.height}
+            deviceWidth={session.device.width}
+            deviceHeight={session.device.height}
           />
-          <div className="controls">
-            <button onClick={() => lab.sendInput({ kind: "key", key: "BACK" })}>
-              ◀ Back
-            </button>
-            <button onClick={() => lab.sendInput({ kind: "key", key: "HOME" })}>
-              ● Home
-            </button>
-            <form
-              className="text-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (text.trim().length > 0) {
-                  lab.sendInput({ kind: "text", text });
-                  setText("");
-                }
-              }}
-            >
-              <input
-                type="text"
-                placeholder="Type text, press Enter to send"
-                value={text}
-                maxLength={512}
-                onChange={(e) => setText(e.target.value)}
-              />
-              <button type="submit">Send</button>
-            </form>
-            <button className="danger" onClick={() => lab.endSession()}>
-              End session
-            </button>
+          <div className="ws-hint">
+            Tap and drag directly on the screen, or drive it from the test
+            console.
           </div>
-        </main>
-      )}
-
-      {state.phase === "ended" && (
-        <main className="center-card">
-          <p className="queue-copy">Session ended</p>
-          <p className="hint">reason: {state.endedReason ?? "unknown"}</p>
-          <button className="primary" onClick={() => void lab.requestDevice()}>
-            Request a device
-          </button>
-        </main>
-      )}
+        </div>
+      </div>
     </div>
   );
+}
+
+export function App() {
+  const { lab, state } = useLab();
+  if (state.phase === "active" && state.session) {
+    return <Workspace lab={lab} state={state} />;
+  }
+  return <Landing lab={lab} state={state} />;
 }

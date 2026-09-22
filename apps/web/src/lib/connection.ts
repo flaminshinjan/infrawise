@@ -3,10 +3,13 @@ import {
   FrameCodec,
   type ClientStateSnapshot,
   type DisplayInfo,
+  type InputAck,
   type InputPayload,
   type PoolStatus,
   type ServerMessage,
 } from "@lab/protocol";
+
+export type InputAckMessage = InputAck;
 
 export type ConnectionStatus = "connecting" | "connected" | "reconnecting";
 
@@ -94,6 +97,7 @@ export class LabConnection {
 
   private ws: WebSocket | null = null;
   private listeners = new Set<() => void>();
+  private ackListeners = new Set<(ack: InputAckMessage) => void>();
   private readonly clientToken = getClientToken();
   private nextSeq = 1;
   private sentAtBySeq = new Map<number, number>();
@@ -105,6 +109,47 @@ export class LabConnection {
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  subscribeAcks(listener: (ack: InputAckMessage) => void): () => void {
+    this.ackListeners.add(listener);
+    return () => this.ackListeners.delete(listener);
+  }
+
+  /** Send one input and resolve with its ack (or a timeout rejection ack). */
+  sendInputAwaited(
+    payload: InputPayload,
+    timeoutMs = 12_000,
+  ): Promise<InputAckMessage> {
+    const seq = this.sendInput(payload);
+    if (seq === null) {
+      return Promise.resolve({
+        type: "input.ack",
+        sessionId: "",
+        seq: 0,
+        status: "rejected",
+        reason: "no active session",
+      });
+    }
+    return new Promise((resolve) => {
+      const timer = window.setTimeout(() => {
+        unsubscribe();
+        resolve({
+          type: "input.ack",
+          sessionId: "",
+          seq,
+          status: "rejected",
+          reason: "timed out waiting for device",
+        });
+      }, timeoutMs);
+      const unsubscribe = this.subscribeAcks((ack) => {
+        if (ack.seq === seq) {
+          clearTimeout(timer);
+          unsubscribe();
+          resolve(ack);
+        }
+      });
+    });
   }
 
   private update(patch: Partial<LabState>): void {
@@ -205,6 +250,7 @@ export class LabConnection {
         if (msg.status === "rejected" && msg.expectedSeq !== undefined) {
           this.nextSeq = msg.expectedSeq;
         }
+        for (const listener of this.ackListeners) listener(msg);
         break;
       }
       case "device.state":
