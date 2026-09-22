@@ -1,0 +1,41 @@
+{
+  "env": {
+    "machine": "Apple M5 Pro",
+    "cores": 15,
+    "os": "macOS 26.6.1",
+    "emulator": "3x Android 14 (API 34) arm64 AVD, 720x1280@320dpi, swiftshader, headless",
+    "stream": "adb screenrecord H.264 -> ffmpeg MJPEG (q7) -> WS binary, latest-frame-wins",
+    "date": "2026-09-22T14:28:09.232Z"
+  },
+  "allocationMs": 11,
+  "one": {
+    "streams": 1,
+    "deliveredFps": 33.3,
+    "captureToReceiveP50": 0,
+    "captureToReceiveP95": 2,
+    "inputRttP50": 296,
+    "inputRttP95": 310,
+    "serverCpu": 1.4,
+    "serverRssMb": 86
+  },
+  "tap": {
+    "samples": 30,
+    "p50": 97,
+    "p95": 132
+  },
+  "three": {
+    "streams": 3,
+    "deliveredFps": 27,
+    "captureToReceiveP50": 0,
+    "captureToReceiveP95": 1,
+    "inputRttP50": 302,
+    "inputRttP95": 357,
+    "serverCpu": 2.7,
+    "serverRssMb": 100
+  },
+  "tap3": {
+    "samples": 15,
+    "p50": 117,
+    "p95": 161
+  }
+}

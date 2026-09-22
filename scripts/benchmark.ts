@@ -37,6 +37,7 @@ interface BenchClient {
   requestedAt?: number;
   acks: Map<number, { sentAt: number; ackedAt?: number }>;
   collect: boolean;
+  heartbeat?: NodeJS.Timeout;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -90,9 +91,24 @@ async function connect(name: string): Promise<BenchClient> {
       client.fence = msg.fence;
       client.deviceId = msg.device.deviceId;
       client.seq = msg.lastAcceptedInputSeq;
+      // keep the session alive for the whole run (the reaper treats a silent
+      // client as a hung tab after HEARTBEAT_TIMEOUT_MS)
+      if (!client.heartbeat) {
+        client.heartbeat = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "session.heartbeat", sessionId: client.sessionId }));
+          }
+        }, 5000);
+      }
     } else if (msg.type === "input.ack") {
-      const entry = client.acks.get(msg.seq);
-      if (entry) entry.ackedAt = now;
+      if (msg.status === "applied") {
+        const entry = client.acks.get(msg.seq);
+        if (entry) entry.ackedAt = now;
+      } else if (msg.status === "rejected" && msg.expectedSeq !== undefined) {
+        // resync like the real web client does (overload rejections do not
+        // consume sequence slots)
+        client.seq = msg.expectedSeq - 1;
+      }
     }
   });
   await new Promise<void>((resolve, reject) => {
@@ -134,27 +150,26 @@ function sendInput(client: BenchClient, payload: unknown): number {
   return client.seq;
 }
 
-/** swipe loop to keep pixels changing while measuring FPS */
+/**
+ * Swipe loop to keep pixels changing while measuring FPS. Paced slower than
+ * ADB swipe execution (~650 ms) so the per-session input queue never
+ * saturates: FPS measurement should not depend on input backpressure.
+ */
 async function induceMotion(
   client: BenchClient,
   durationMs: number,
 ): Promise<void> {
   const until = Date.now() + durationMs;
+  let downward = true;
   while (Date.now() < until) {
     sendInput(client, {
       kind: "swipe",
-      from: { x: 0.5, y: 0.75 },
-      to: { x: 0.5, y: 0.3 },
-      durationMs: 300,
+      from: { x: 0.5, y: downward ? 0.75 : 0.3 },
+      to: { x: 0.5, y: downward ? 0.3 : 0.75 },
+      durationMs: 250,
     });
-    await sleep(450);
-    sendInput(client, {
-      kind: "swipe",
-      from: { x: 0.5, y: 0.3 },
-      to: { x: 0.5, y: 0.75 },
-      durationMs: 300,
-    });
-    await sleep(450);
+    downward = !downward;
+    await sleep(900);
   }
 }
 
@@ -235,20 +250,30 @@ async function measureStreams(
   };
 }
 
-/** tap -> first frame captured after the tap (idle screen between samples) */
+/**
+ * input -> first frame captured after the input, with an idle screen between
+ * samples. A short swipe is used as the probe because it always changes
+ * pixels (workspace pan/overscroll), unlike a HOME press on the home screen.
+ */
 async function measureTapToPixel(
   client: BenchClient,
   samples: number,
 ): Promise<number[]> {
   const results: number[] = [];
-  await sleep(2500); // let the screen go fully idle
+  await sleep(4000); // drain pipeline-buffered frames from earlier motion
   for (let i = 0; i < samples; i++) {
     client.frames = [];
     client.collect = true;
     const sentAt = Date.now();
-    // alternating taps on the home screen produce a visible response
-    // (icon press ripple / app drawer) without navigating anywhere permanent
-    sendInput(client, { kind: "key", key: "HOME" });
+    // Alternating full vertical swipes always animate something visible:
+    // shade/app-drawer opening one way, closing (or overscroll) the other.
+    const down = i % 2 === 0;
+    sendInput(client, {
+      kind: "swipe",
+      from: { x: 0.5, y: down ? 0.15 : 0.8 },
+      to: { x: 0.5, y: down ? 0.7 : 0.2 },
+      durationMs: 120,
+    });
     const deadline = Date.now() + 4000;
     let arrival: number | null = null;
     while (Date.now() < deadline) {
@@ -260,8 +285,13 @@ async function measureTapToPixel(
       await sleep(5);
     }
     client.collect = false;
-    if (arrival !== null) results.push(arrival - sentAt);
-    await sleep(1500); // return to idle
+    if (arrival !== null) {
+      results.push(arrival - sentAt);
+      process.stdout.write(`  sample ${i + 1}: ${arrival - sentAt}ms\n`);
+    } else {
+      process.stdout.write(`  sample ${i + 1}: no visible change within 4s\n`);
+    }
+    await sleep(3000); // return to idle and drain the pipeline
   }
   return results;
 }
@@ -346,6 +376,7 @@ capture-to-glass cost is captured by the tap-to-visible-change rows.
   console.log(md);
 
   for (const c of [c1, c2, c3]) {
+    if (c.heartbeat) clearInterval(c.heartbeat);
     c.ws.send(JSON.stringify({ type: "session.end", sessionId: c.sessionId }));
     await sleep(200);
     c.ws.close();

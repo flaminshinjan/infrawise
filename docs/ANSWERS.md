@@ -78,8 +78,10 @@ hosting runtime plumbing. Both are recoverable:
 
 Observed in the fault demo on this machine: sessions become reconnectable
 immediately on restart (reconciliation runs before the server accepts
-traffic), and a non-returning client's device is cleaned and reassigned about
-17 s after restart (15 s grace + one reaper tick + ~1 s cleanup).
+traffic), and a non-returning client's device is cleaned and returned to the
+pool ~20 s after restart — 15 s grace + a reaper tick + sub-second cleanup —
+about 23 s total from the `kill -9` itself, dominated by the deliberately
+client-friendly grace window.
 
 ## 4. What is the framerate, bottleneck, and best single improvement?
 
@@ -88,13 +90,18 @@ Apple Silicon host, three 720×1280 emulators, `screenrecord` H.264 → ffmpeg
 MJPEG → WebSocket):
 
 - Streaming is change-driven, so idle screens cost ~0 and FPS is measured
-  under continuous swiping motion. Delivered FPS stayed in the same band at
-  one and three simultaneous streams.
-- Tap-to-visible-change latency was measured by exploiting the change-driven
-  encoder: with an idle screen, the first frame captured after an input is
-  that input's visual effect. Reported p50/p95 over 30 samples (this includes
-  capture, encode, and transport, but excludes browser decode/paint — an
-  honest ~10–30 ms undercount versus true glass-to-glass).
+  under paced swiping motion: **33 FPS delivered at 1 stream, 27 FPS at 3
+  streams** (≈60 FPS peak under continuous animation). Server CPU stayed
+  under 3% at three streams (the transcode cost lives in the per-device
+  ffmpeg/screenrecord processes).
+- Tap-to-visible-change latency, measured by exploiting the change-driven
+  encoder (with an idle screen, the first frame captured after an input is
+  that input's visual effect): **p50 97 ms / p95 132 ms** at one stream,
+  **p50 117 ms / p95 161 ms** under three-stream load (30/15 samples). This
+  includes capture, encode, and transport but excludes browser decode/paint —
+  an honest ~10–30 ms undercount versus true glass-to-glass.
+- Input command RTT (send → ACK after `adb shell input` completes) is
+  ~300 ms p50, dominated by ADB's own execution time; allocation is 11 ms.
 
 The measured bottleneck is the capture/encode pipeline latency, not
 bandwidth and not the scheduler (allocation is single-digit milliseconds and
