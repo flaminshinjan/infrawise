@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useLab } from "../hooks/useLab.js";
+import { useTheme, type Theme } from "../hooks/useTheme.js";
 import { DeviceViewport } from "../components/DeviceViewport.js";
 import { ChatPane } from "../components/ChatPane.js";
 import type { LabConnection, LabState } from "../lib/connection.js";
@@ -23,31 +24,38 @@ function formatDuration(ms: number): string {
 function Mark() {
   return (
     <svg className="mark" viewBox="0 0 32 32" aria-hidden="true">
-      <rect x="2" y="2" width="28" height="28" rx="8" fill="#0435DD" />
+      <rect x="3" y="2" width="26" height="28" rx="7" className="mark-body" />
       <rect
         x="11"
         y="7"
         width="10"
-        height="18"
-        rx="2.5"
-        fill="none"
-        stroke="#fff"
-        strokeWidth="2"
+        height="14"
+        rx="2"
+        className="mark-screen"
       />
-      <circle cx="16" cy="21.5" r="1.4" fill="#fff" />
+      <circle cx="16" cy="24.5" r="1.6" className="mark-dot" />
     </svg>
+  );
+}
+
+function ThemeToggle({ theme, toggle }: { theme: Theme; toggle: () => void }) {
+  return (
+    <button
+      className="theme-toggle"
+      onClick={toggle}
+      title="Toggle theme"
+      aria-label="Toggle theme"
+    >
+      {theme === "light" ? "☾" : "☀"}
+    </button>
   );
 }
 
 function ConnectionBadge({ state }: { state: LabState }) {
   if (state.connection === "connected")
-    return <span className="badge ok">● connected</span>;
+    return <span className="badge ok">● live</span>;
   if (state.connection === "reconnecting")
-    return (
-      <span className="badge warn">
-        reconnecting — holding your spot for 15 s
-      </span>
-    );
+    return <span className="badge warn">reconnecting…</span>;
   return <span className="badge">connecting…</span>;
 }
 
@@ -56,18 +64,46 @@ function PoolPill({ state }: { state: LabState }) {
   if (!pool) return null;
   return (
     <span className="pool-pill">
-      <span className="dot free" /> {pool.available} free
-      <span className="dot busy" /> {pool.inUse + pool.reserved} in use
+      <span className="dot free" /> {pool.available}
+      <span className="dot busy" /> {pool.inUse + pool.reserved}
       {pool.offline > 0 && (
         <>
-          <span className="dot off" /> {pool.offline} offline
+          <span className="dot off" /> {pool.offline}
         </>
       )}
     </span>
   );
 }
 
-function Landing({ lab, state }: { lab: LabConnection; state: LabState }) {
+/** Original, generic phone shell — bezel, camera dot, side keys, home bar. */
+function Phone({ children }: { children: ReactNode }) {
+  return (
+    <div className="phone">
+      <span className="phone-key phone-power" />
+      <span className="phone-key phone-vol-up" />
+      <span className="phone-key phone-vol-dn" />
+      <div className="phone-screen">
+        <div className="phone-status">
+          <span className="phone-cam" />
+        </div>
+        {children}
+        <div className="phone-home" />
+      </div>
+    </div>
+  );
+}
+
+function Landing({
+  lab,
+  state,
+  theme,
+  toggle,
+}: {
+  lab: LabConnection;
+  state: LabState;
+  theme: Theme;
+  toggle: () => void;
+}) {
   const now = useNow(1000);
 
   return (
@@ -75,136 +111,138 @@ function Landing({ lab, state }: { lab: LabConnection; state: LabState }) {
       <nav className="nav">
         <div className="nav-brand">
           <Mark />
-          <span className="brand-name">Shared Device Lab</span>
+          <span className="brand-name">Device Lab</span>
         </div>
         <div className="nav-right">
           <PoolPill state={state} />
           <ConnectionBadge state={state} />
+          <ThemeToggle theme={theme} toggle={toggle} />
         </div>
       </nav>
 
       <main className="hero">
-        <span className="eyebrow">An execution substrate for agentic QA</span>
-        <h1>
-          Real Android devices,
-          <br />
-          <em>leased fairly</em>, tested live.
-        </h1>
-        <p className="hero-sub">
-          Request a device and get an exclusive, crash-safe lease on a live
-          Android emulator — streamed to your browser, driven by touch or by
-          plain-language test steps. When you’re done, the next person in line
-          takes over automatically.
-        </p>
+        <div className="hero-copy">
+          <span className="eyebrow">execution substrate for agentic QA</span>
+          <h1>
+            Drive real Android
+            <br />
+            devices <span className="grad">in plain English.</span>
+          </h1>
+          <p className="hero-sub">
+            Lease a live emulator, watch it stream into a phone in your browser,
+            and run tests by typing what you want — a cursor flies across the
+            screen and does it. Fair queue, crash-safe leases, the next tester
+            served automatically.
+          </p>
 
-        <div className="hero-action">
-          {state.phase === "idle" && (
-            <>
-              <button className="cta" onClick={() => void lab.requestDevice()}>
-                Request a device
-              </button>
-              <span className="cta-note">
-                Fair FIFO queue · 10-minute lease · no sign-up
-              </span>
-            </>
-          )}
-
-          {state.phase === "waiting" && (
-            <div className="queue-card">
-              <div className="queue-num">{state.position ?? "…"}</div>
-              <div className="queue-info">
-                <strong>
-                  {state.position === 1
-                    ? "You’re next"
-                    : `${(state.position ?? 1) - 1} ahead of you`}
-                </strong>
-                <span>
-                  waiting{" "}
-                  {state.enqueuedAt
-                    ? formatDuration(now - state.enqueuedAt)
-                    : "…"}{" "}
-                  — your spot survives refreshes
+          <div className="hero-action">
+            {state.phase === "idle" && (
+              <>
+                <button
+                  className="cta"
+                  onClick={() => void lab.requestDevice()}
+                >
+                  Request a device →
+                </button>
+                <span className="cta-note">
+                  FIFO queue · 10-min lease · no sign-up
                 </span>
+              </>
+            )}
+            {state.phase === "waiting" && (
+              <div className="queue-card">
+                <div className="queue-num">{state.position ?? "…"}</div>
+                <div className="queue-info">
+                  <strong>
+                    {state.position === 1
+                      ? "You’re next"
+                      : `${(state.position ?? 1) - 1} ahead of you`}
+                  </strong>
+                  <span>
+                    waiting{" "}
+                    {state.enqueuedAt
+                      ? formatDuration(now - state.enqueuedAt)
+                      : "…"}{" "}
+                    · survives refresh
+                  </span>
+                </div>
+                <button
+                  className="ghost"
+                  onClick={() => void lab.cancelRequest()}
+                >
+                  Leave
+                </button>
               </div>
-              <button
-                className="ghost"
-                onClick={() => void lab.cancelRequest()}
-              >
-                Leave queue
-              </button>
-            </div>
-          )}
-
-          {state.phase === "reserved" && (
-            <div className="queue-card">
-              <span className="spinner" />
-              <div className="queue-info">
-                <strong>Device reserved</strong>
-                <span>claiming your session…</span>
+            )}
+            {state.phase === "reserved" && (
+              <div className="queue-card">
+                <span className="spinner" />
+                <div className="queue-info">
+                  <strong>Device reserved</strong>
+                  <span>claiming your session…</span>
+                </div>
               </div>
-            </div>
-          )}
-
-          {state.phase === "ended" && (
-            <div className="queue-card ended">
-              <div className="queue-info">
-                <strong>Session ended</strong>
-                <span>reason: {state.endedReason ?? "unknown"}</span>
+            )}
+            {state.phase === "ended" && (
+              <div className="queue-card">
+                <div className="queue-info">
+                  <strong>Session ended</strong>
+                  <span>reason: {state.endedReason ?? "unknown"}</span>
+                </div>
+                <button
+                  className="cta small"
+                  onClick={() => void lab.requestDevice()}
+                >
+                  Again →
+                </button>
               </div>
-              <button
-                className="cta small"
-                onClick={() => void lab.requestDevice()}
-              >
-                Request again
-              </button>
-            </div>
+            )}
+          </div>
+          {state.lastError && (
+            <div className="hero-error">{state.lastError}</div>
           )}
         </div>
 
-        {state.lastError && <div className="hero-error">{state.lastError}</div>}
+        <div className="hero-visual">
+          <Phone>
+            <div className="phone-poster">
+              <div className="poster-grid">
+                {["◎", "✎", "⇧", "⌂", "◐", "✦", "▷", "⚑", "◈"].map((g, i) => (
+                  <span key={i} style={{ animationDelay: `${i * 0.12}s` }}>
+                    {g}
+                  </span>
+                ))}
+              </div>
+              <p className="poster-cap">tap · swipe · type · launch</p>
+            </div>
+          </Phone>
+        </div>
       </main>
-
-      <section className="features">
-        <div className="feature">
-          <h3>Fair, atomic leases</h3>
-          <p>
-            One Redis transaction assigns each device — two clients can never
-            own the same one. FIFO order with live queue positions, no jumping
-            the line.
-          </p>
-        </div>
-        <div className="feature">
-          <h3>Crash-safe ownership</h3>
-          <p>
-            Leases expire, fencing tokens advance, and devices are cleaned
-            before reassignment — even after a <code>kill&nbsp;-9</code>.
-            Refreshing your tab keeps your session.
-          </p>
-        </div>
-        <div className="feature">
-          <h3>Test in plain language</h3>
-          <p>
-            A chat console compiles sentences like “open notifications, then
-            type hello” into ordered, acknowledged device input — the same
-            protocol an agent would drive.
-          </p>
-        </div>
-      </section>
 
       <footer className="footer">
         <span>33 fps live stream</span>
         <span className="sep" />
-        <span>97 ms tap-to-pixel (p50)</span>
+        <span>97 ms tap-to-pixel</span>
         <span className="sep" />
         <span>11 ms allocation</span>
         <span className="sep" />
-        <span>measured, not estimated — see the repo README</span>
+        <span>measured, not estimated</span>
       </footer>
     </div>
   );
 }
 
-function Workspace({ lab, state }: { lab: LabConnection; state: LabState }) {
+function Workspace({
+  lab,
+  state,
+  theme,
+  toggle,
+}: {
+  lab: LabConnection;
+  state: LabState;
+  theme: Theme;
+  toggle: () => void;
+}) {
   const now = useNow(1000);
   const session = state.session!;
   return (
@@ -212,40 +250,40 @@ function Workspace({ lab, state }: { lab: LabConnection; state: LabState }) {
       <header className="ws-bar">
         <div className="nav-brand">
           <Mark />
-          <span className="brand-name">Shared Device Lab</span>
+          <span className="brand-name">Device Lab</span>
         </div>
         <div className="ws-meta">
           <span className="ws-device">{session.device.deviceId}</span>
-          <span className="ws-dim">
-            {session.device.width}×{session.device.height}
-          </span>
           <span className="ws-stat">{state.fps} fps</span>
           {state.inputRttMs !== null && (
-            <span className="ws-stat">{state.inputRttMs} ms input</span>
+            <span className="ws-stat">{state.inputRttMs} ms</span>
           )}
           <span className="ws-countdown">
-            {formatDuration(session.expiresAt - now)} left
+            {formatDuration(session.expiresAt - now)}
           </span>
         </div>
         <div className="ws-right">
           <ConnectionBadge state={state} />
+          <ThemeToggle theme={theme} toggle={toggle} />
           <button className="ghost danger" onClick={() => lab.endSession()}>
-            End session
+            End
           </button>
         </div>
       </header>
 
       <div className="ws-body">
         <ChatPane lab={lab} sessionKey={session.sessionId} />
-        <div className="ws-device-col">
-          <DeviceViewport
-            lab={lab}
-            deviceWidth={session.device.width}
-            deviceHeight={session.device.height}
-          />
+        <div className="ws-stage">
+          <Phone>
+            <DeviceViewport
+              lab={lab}
+              deviceWidth={session.device.width}
+              deviceHeight={session.device.height}
+            />
+          </Phone>
           <div className="ws-hint">
-            Tap and drag directly on the screen, or drive it from the test
-            console.
+            Touch the screen directly, or type a command — the cursor will do
+            it.
           </div>
         </div>
       </div>
@@ -255,8 +293,9 @@ function Workspace({ lab, state }: { lab: LabConnection; state: LabState }) {
 
 export function App() {
   const { lab, state } = useLab();
+  const { theme, toggle } = useTheme();
   if (state.phase === "active" && state.session) {
-    return <Workspace lab={lab} state={state} />;
+    return <Workspace lab={lab} state={state} theme={theme} toggle={toggle} />;
   }
-  return <Landing lab={lab} state={state} />;
+  return <Landing lab={lab} state={state} theme={theme} toggle={toggle} />;
 }

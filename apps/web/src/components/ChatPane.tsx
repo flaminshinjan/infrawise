@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LabConnection } from "../lib/connection.js";
 import { compileRemote } from "../lib/compile.js";
+import { Typewriter } from "./Typewriter.js";
 import {
   EXAMPLE_COMMANDS,
   GRAMMAR_HELP,
@@ -57,6 +58,11 @@ export function ChatPane({ lab, sessionKey }: Props) {
     ]);
   }, [sessionKey]);
 
+  const scrollToEnd = useCallback(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, []);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
@@ -89,6 +95,14 @@ export function ChatPane({ lab, sessionKey }: Props) {
             entry = { label: step.label, status: "applied" };
           } else {
             const startedAt = performance.now();
+            // Fly the on-screen cursor to the target, then execute the input so
+            // the pointer is visibly "doing" the action.
+            lab.previewGesture(step.payload);
+            const travel =
+              step.payload.kind === "swipe"
+                ? step.payload.durationMs + 450
+                : 520;
+            await new Promise((r) => setTimeout(r, travel));
             const ack = await lab.sendInputAwaited(step.payload);
             entry =
               ack.status === "rejected"
@@ -216,7 +230,14 @@ export function ChatPane({ lab, sessionKey }: Props) {
                 <span className="step-spinner" /> Thinking…
               </div>
             ) : (
-              m.text && <div className="chat-bubble">{m.text}</div>
+              m.text &&
+              (m.role === "system" ? (
+                <div className="chat-bubble">
+                  <Typewriter text={m.text} onTick={scrollToEnd} />
+                </div>
+              ) : (
+                <div className="chat-bubble">{m.text}</div>
+              ))
             )}
             {m.note && <div className="chat-note">{m.note}</div>}
             {m.steps && (

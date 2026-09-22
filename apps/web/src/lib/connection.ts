@@ -11,6 +11,9 @@ import {
 
 export type InputAckMessage = InputAck;
 
+/** Emitted just before a step executes, so the UI can animate the cursor. */
+export type GesturePreview = InputPayload;
+
 export type ConnectionStatus = "connecting" | "connected" | "reconnecting";
 
 export interface ActiveSession {
@@ -98,6 +101,7 @@ export class LabConnection {
   private ws: WebSocket | null = null;
   private listeners = new Set<() => void>();
   private ackListeners = new Set<(ack: InputAckMessage) => void>();
+  private gestureListeners = new Set<(g: GesturePreview) => void>();
   private readonly clientToken = getClientToken();
   private nextSeq = 1;
   private sentAtBySeq = new Map<number, number>();
@@ -114,6 +118,16 @@ export class LabConnection {
   subscribeAcks(listener: (ack: InputAckMessage) => void): () => void {
     this.ackListeners.add(listener);
     return () => this.ackListeners.delete(listener);
+  }
+
+  /** Gesture previews drive the animated cursor overlay on the device screen. */
+  subscribeGestures(listener: (g: GesturePreview) => void): () => void {
+    this.gestureListeners.add(listener);
+    return () => this.gestureListeners.delete(listener);
+  }
+
+  previewGesture(g: GesturePreview): void {
+    for (const l of this.gestureListeners) l(g);
   }
 
   /** Send one input and resolve with its ack (or a timeout rejection ack). */
