@@ -159,6 +159,10 @@ export class FakeAdapter implements DeviceAdapter {
     await this.invoke("key", device.adbSerial, [key]);
   }
 
+  async launch(device: DeviceRef, app: string): Promise<void> {
+    await this.invoke("launch", device.adbSerial, [app]);
+  }
+
   async cleanup(device: DeviceRef): Promise<void> {
     await this.invoke("cleanup", device.adbSerial, []);
   }

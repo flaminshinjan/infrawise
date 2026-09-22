@@ -85,4 +85,56 @@ describe("natural-language test-step parser", () => {
     expect(r.error).toContain("backflip");
     expect(r.steps).toHaveLength(0); // nothing runs when any clause fails
   });
+
+  it("launches apps from open / go to / bare-name phrasings", () => {
+    for (const cmd of [
+      "open settings",
+      "go to settings",
+      "settings",
+      "launch the settings app",
+    ]) {
+      const r = parseCommand(cmd);
+      expect(r.ok, cmd).toBe(true);
+      expect(r.steps[0]).toMatchObject({
+        payload: { kind: "launch", app: "settings" },
+      });
+    }
+    expect(parseCommand("go to wifi settings").steps[0]).toMatchObject({
+      payload: { kind: "launch", app: "wifi_settings" },
+    });
+    expect(parseCommand("open the camera").steps[0]).toMatchObject({
+      payload: { kind: "launch", app: "camera" },
+    });
+    expect(parseCommand("open chrome browser").steps[0]).toMatchObject({
+      payload: { kind: "launch", app: "chrome" },
+    });
+    expect(parseCommand("open the app drawer").steps[0]).toMatchObject({
+      payload: { kind: "launch", app: "app_drawer" },
+    });
+  });
+
+  it("tolerates politeness and filler phrasing", () => {
+    expect(parseCommand("swipe up from the bottom pls").steps[0]).toMatchObject(
+      {
+        payload: { kind: "swipe" },
+      },
+    );
+    expect(parseCommand("please open settings").steps[0]).toMatchObject({
+      payload: { kind: "launch", app: "settings" },
+    });
+    expect(
+      parseCommand("can you go to settings for me").steps[0],
+    ).toMatchObject({
+      payload: { kind: "launch", app: "settings" },
+    });
+    expect(parseCommand("i want to tap the center").steps[0]).toMatchObject({
+      payload: { kind: "tap" },
+    });
+  });
+
+  it("keeps 'open notifications' as a gesture, not an app launch", () => {
+    expect(parseCommand("open notifications").steps[0]).toMatchObject({
+      payload: { kind: "swipe" },
+    });
+  });
 });

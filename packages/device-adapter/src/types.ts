@@ -71,5 +71,6 @@ export interface DeviceAdapter {
   ): Promise<void>;
   typeText(device: DeviceRef, text: string): Promise<void>;
   key(device: DeviceRef, key: "BACK" | "HOME"): Promise<void>;
+  launch(device: DeviceRef, app: string): Promise<void>;
   cleanup(device: DeviceRef): Promise<void>;
 }

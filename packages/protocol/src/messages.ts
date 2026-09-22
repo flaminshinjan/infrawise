@@ -11,6 +11,33 @@ export type NormalizedPoint = z.infer<typeof NormalizedPointSchema>;
 
 export const MAX_TEXT_LENGTH_HARD = 2000;
 
+/**
+ * Apps/screens the lab can launch by name. The wire carries only this enum,
+ * never a free-form package or shell string — the adapter maps each id to an
+ * explicit, injection-safe `am start` argument array.
+ */
+export const LAUNCH_APP_IDS = [
+  "settings",
+  "wifi_settings",
+  "bluetooth_settings",
+  "display_settings",
+  "app_settings",
+  "chrome",
+  "camera",
+  "clock",
+  "phone",
+  "contacts",
+  "messages",
+  "calculator",
+  "gmail",
+  "maps",
+  "photos",
+  "play_store",
+  "files",
+  "app_drawer",
+] as const;
+export type LaunchAppId = (typeof LAUNCH_APP_IDS)[number];
+
 export const InputPayloadSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("tap"), point: NormalizedPointSchema }),
   z.object({
@@ -24,6 +51,7 @@ export const InputPayloadSchema = z.discriminatedUnion("kind", [
     text: z.string().min(1).max(MAX_TEXT_LENGTH_HARD),
   }),
   z.object({ kind: z.literal("key"), key: z.enum(["BACK", "HOME"]) }),
+  z.object({ kind: z.literal("launch"), app: z.enum(LAUNCH_APP_IDS) }),
 ]);
 export type InputPayload = z.infer<typeof InputPayloadSchema>;
 

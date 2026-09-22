@@ -24,6 +24,74 @@ import type {
 
 const FFMPEG = process.env.FFMPEG_PATH ?? "ffmpeg";
 const KEYCODES = { BACK: "4", HOME: "3" } as const;
+
+/**
+ * Launch targets → explicit `am start` argument arrays. Settings sub-screens
+ * use stable intent actions (present on any Android build); apps use component
+ * or package launches. Every value is a fixed literal token array, so a launch
+ * request can never inject shell or arbitrary components — the id is validated
+ * against this table and unknown ids are rejected.
+ */
+const LAUNCH_INTENTS: Record<string, string[]> = {
+  settings: ["-a", "android.settings.SETTINGS"],
+  wifi_settings: ["-a", "android.settings.WIFI_SETTINGS"],
+  bluetooth_settings: ["-a", "android.settings.BLUETOOTH_SETTINGS"],
+  display_settings: ["-a", "android.settings.DISPLAY_SETTINGS"],
+  app_settings: ["-a", "android.settings.APPLICATION_SETTINGS"],
+  clock: ["-a", "android.intent.action.SHOW_ALARMS"],
+  phone: ["-a", "android.intent.action.DIAL"],
+  contacts: [
+    "-a",
+    "android.intent.action.VIEW",
+    "-t",
+    "vnd.android.cursor.dir/contact",
+  ],
+  chrome: ["-n", "com.android.chrome/com.google.android.apps.chrome.Main"],
+  camera: ["-a", "android.media.action.STILL_IMAGE_CAMERA"],
+  messages: [
+    "-a",
+    "android.intent.action.MAIN",
+    "-c",
+    "android.intent.category.APP_MESSAGING",
+  ],
+  calculator: [
+    "-a",
+    "android.intent.action.MAIN",
+    "-c",
+    "android.intent.category.APP_CALCULATOR",
+  ],
+  gmail: [
+    "-a",
+    "android.intent.action.MAIN",
+    "-c",
+    "android.intent.category.APP_EMAIL",
+  ],
+  maps: [
+    "-a",
+    "android.intent.action.MAIN",
+    "-c",
+    "android.intent.category.APP_MAPS",
+  ],
+  photos: [
+    "-a",
+    "android.intent.action.MAIN",
+    "-c",
+    "android.intent.category.APP_GALLERY",
+  ],
+  play_store: [
+    "-a",
+    "android.intent.action.MAIN",
+    "-c",
+    "android.intent.category.APP_MARKET",
+  ],
+  files: [
+    "-a",
+    "android.intent.action.MAIN",
+    "-c",
+    "android.intent.category.APP_FILES",
+  ],
+};
+
 /** screenrecord hard-caps a single recording; we restart before it ends. */
 const SCREENRECORD_SEGMENT_SECONDS = 175;
 /** how often the keepalive checks whether the H.264 stream has gone quiet */
@@ -168,6 +236,31 @@ export class AdbAndroidAdapter implements DeviceAdapter {
       "keyevent",
       KEYCODES[key],
     ]);
+  }
+
+  async launch(device: DeviceRef, app: string): Promise<void> {
+    if (app === "app_drawer") {
+      // KEYCODE_ALL_APPS (284) opens the launcher's app drawer, no dims needed.
+      await adbExec(device.adbSerial, ["shell", "input", "keyevent", "284"]);
+      return;
+    }
+    const spec = LAUNCH_INTENTS[app];
+    if (!spec) throw new AdbError(`unknown launch target '${app}'`, []);
+    // Explicit argument array: the app id is validated against the table above,
+    // and every token is a fixed literal — nothing user-supplied is spliced
+    // into a shell string.
+    const out = await adbExec(
+      device.adbSerial,
+      ["shell", "am", "start", ...spec],
+      15_000,
+    );
+    // `am start` exits 0 even when the intent can't resolve (app not installed),
+    // so detect the failure text and surface it as a real rejection.
+    if (
+      /unable to resolve|activity not started|does not exist|Error:/i.test(out)
+    ) {
+      throw new AdbError(`no app available for '${app}' on this device`, []);
+    }
   }
 
   async cleanup(device: DeviceRef): Promise<void> {

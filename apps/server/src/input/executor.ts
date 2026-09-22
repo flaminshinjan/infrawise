@@ -182,6 +182,9 @@ export class InputExecutor {
         case "key":
           await adapter.key(deviceRef, cmd.payload.key);
           break;
+        case "launch":
+          await adapter.launch(deviceRef, cmd.payload.app);
+          break;
       }
       this.lastApplied = Math.max(this.lastApplied, cmd.seq);
       await store
