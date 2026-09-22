@@ -20,8 +20,13 @@ in `sessionStorage`, so separate windows are separate clients).
 1. Click **Request a device** in windows 1–3: each gets a different emulator
    with a live stream.
 2. Window 4: **Request a device** → live queue position 1.
-3. Interact in any active window: tap, drag (swipe), type text via the input
-   bar, Back/Home. Watch the touch indicator and input RTT.
+3. Interact in any active window two ways:
+   - **Directly:** tap and drag on the device screen (touch indicator + input
+     RTT shown in the header).
+   - **Test console (left pane):** type plain-language steps — e.g.
+     `open notifications, then type "hello", then press back` — and watch each
+     compiled step execute in order with its device acknowledgement. Click ✦
+     for floating example commands, or type `help` for the grammar.
 4. Resize the window and tap the same UI element — coordinates stay accurate
    (letterbox mapping is shared code, unit-tested).
 5. Refresh an active window: the session survives (same device, same fence).

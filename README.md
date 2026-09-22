@@ -71,6 +71,17 @@ Browser ──HTTP/WS──▶ Gateway ─▶ Scheduler ─▶ Redis (Lua, lease
 - **kill -9 safe.** TTL leases + reaper + startup reconciliation; no shutdown
   hooks are load-bearing. Run `make fault-demo`.
 
+## Natural-language test console
+
+Active sessions show a chat pane beside the device. Sentences like
+`open notifications, then type "hello", then press back` compile through a
+deterministic grammar (`apps/web/src/lib/nlp.ts`, unit-tested) into the same
+ordered, fenced, acknowledged input protocol the pointer uses — each step
+reports applied/rejected with the device's ack. Deliberately not a model in
+the loop: same sentence, same steps, every time — the property an agent
+planner wants from an execution layer. Floating example chips and a `help`
+grammar reference are built in.
+
 ## Session policy
 
 Refresh reconnects to the same session or queue entry via an opaque token in
