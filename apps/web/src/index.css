@@ -369,36 +369,61 @@ button {
   place-items: center;
   height: min(70vh, 620px);
 }
-.phone-poster {
+/* landing demo scene (faux home screen inside the phone) */
+.phone-screen > .demo {
   position: absolute;
   inset: 0;
+}
+.demo {
+  display: flex;
+  flex-direction: column;
+  padding: 40px 20px 18px;
+  color: #fff;
+  background:
+    radial-gradient(
+      120% 80% at 50% -10%,
+      color-mix(in srgb, var(--accent) 55%, #1a1030),
+      transparent 60%
+    ),
+    linear-gradient(160deg, #241b3a, #120d1e 70%);
+  overflow: hidden;
+}
+.demo-time {
+  text-align: center;
+  font-weight: 600;
+  font-size: 13px;
+  opacity: 0.85;
+  margin-bottom: 20px;
+}
+.demo-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px 12px;
+  flex: 1;
+  align-content: start;
+}
+.demo-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 26px;
-  background: radial-gradient(
-    80% 60% at 50% 20%,
-    color-mix(in srgb, var(--accent) 30%, #111),
-    #0e0d10
-  );
-  color: #fff;
+  gap: 6px;
+  animation: float 3s ease-in-out infinite;
 }
-.poster-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  font-size: 30px;
-}
-.poster-grid span {
-  width: 52px;
-  height: 52px;
+.demo-tile span {
+  width: 46px;
+  height: 46px;
   display: grid;
   place-items: center;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  animation: float 3s ease-in-out infinite;
+  font-size: 21px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(2px);
+}
+.demo-tile em {
+  font-style: normal;
+  font-size: 9.5px;
+  opacity: 0.72;
 }
 @keyframes float {
   0%,
@@ -406,15 +431,72 @@ button {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-7px);
+    transform: translateY(-5px);
   }
 }
-.poster-cap {
+.demo-cursor {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  left: 0;
+  top: 0;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
+  animation: demo-move 8s ease-in-out infinite;
+  z-index: 3;
+}
+@keyframes demo-move {
+  0% {
+    left: 22%;
+    top: 34%;
+    transform: scale(1);
+  }
+  12% {
+    transform: scale(0.72);
+  }
+  16% {
+    transform: scale(1);
+  }
+  33% {
+    left: 74%;
+    top: 30%;
+  }
+  45% {
+    transform: scale(0.72);
+  }
+  49% {
+    transform: scale(1);
+  }
+  62% {
+    left: 50%;
+    top: 52%;
+  }
+  72% {
+    transform: scale(0.72);
+  }
+  76% {
+    transform: scale(1);
+  }
+  100% {
+    left: 22%;
+    top: 34%;
+  }
+}
+.demo-cmd {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   font-family: var(--mono);
-  font-size: 13px;
-  letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.7);
-  margin: 0;
+  font-size: 12px;
+  min-height: 34px;
+}
+.demo-prompt {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .footer {
@@ -490,11 +572,16 @@ button {
   top: 0;
   left: 0;
   right: 0;
-  height: 26px;
+  height: 30px;
   z-index: 4;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   pointer-events: none;
+}
+.phone-status.cam-left {
+  justify-content: flex-start;
+  padding-left: 26px;
 }
 .phone-cam {
   width: 9px;

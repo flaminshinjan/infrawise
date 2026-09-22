@@ -34,6 +34,19 @@ interface Props {
 
 let nextId = 1;
 
+const OPENERS = ["On it", "Got it", "Sure", "Done deal", "Running that"];
+
+/** Friendly one-liner describing a deterministic plan, for the text response. */
+function summarize(steps: TestStep[]): string {
+  const labels = steps.map((s) =>
+    s.label.replace(/^tap /, "tap the ").replace(/\s+\(\d\/\d\)$/, ""),
+  );
+  const opener = OPENERS[Math.floor(Math.random() * OPENERS.length)];
+  if (labels.length === 1) return `${opener} — I’ll ${labels[0]}.`;
+  const last = labels[labels.length - 1];
+  return `${opener} — I’ll ${labels.slice(0, -1).join(", ")}, then ${last}.`;
+}
+
 /**
  * Natural-language test console. Each message compiles to ordered input
  * commands (see lib/nlp.ts); steps run sequentially and display the device's
@@ -135,13 +148,14 @@ export function ChatPane({ lab, sessionKey }: Props) {
   );
 
   const runPlan = useCallback(
-    (steps: TestStep[], note?: string) => {
+    (steps: TestStep[], response: string, note?: string) => {
       const id = nextId++;
       setMessages((all) => [
         ...all,
         {
           id,
           role: "system",
+          text: response,
           note,
           steps: steps.map((s) => ({
             label: s.label,
@@ -176,7 +190,7 @@ export function ChatPane({ lab, sessionKey }: Props) {
       // Fast path: the deterministic parser handles common commands instantly.
       const parsed = parseCommand(trimmed);
       if (parsed.ok) {
-        runPlan(parsed.steps);
+        runPlan(parsed.steps, summarize(parsed.steps));
         return;
       }
 
@@ -192,10 +206,11 @@ export function ChatPane({ lab, sessionKey }: Props) {
         setMessages((all) => all.filter((m) => m.id !== thinkingId));
         setRunning(false);
         if (result.ok && result.steps.length > 0) {
-          runPlan(
-            result.steps,
-            result.note ? `AI · ${result.note}` : "interpreted by AI",
-          );
+          const response =
+            result.note && result.note.length > 0
+              ? result.note
+              : summarize(result.steps);
+          runPlan(result.steps, response, "interpreted by AI");
         } else {
           const reason =
             result.error ?? parsed.error ?? "Didn’t understand that.";

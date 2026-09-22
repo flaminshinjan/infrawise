@@ -107,6 +107,8 @@ function systemPrompt(): string {
     `  Allowed app ids: ${LAUNCH_APP_IDS.join(", ")}.`,
     "- wait: set ms (use after launching an app or triggering navigation).",
     "Always include a short human 'label' for each step (max 6 words).",
+    "Always set 'note' to one short, friendly first-person sentence telling the",
+    'tester what you\'re about to do (e.g. "Opening Settings and scrolling down").',
     "",
     "If the request cannot be expressed with these actions, set understood=false,",
     "return an empty steps array, and explain briefly in note. Never invent actions.",

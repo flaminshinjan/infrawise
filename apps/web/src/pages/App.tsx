@@ -3,6 +3,8 @@ import { useLab } from "../hooks/useLab.js";
 import { useTheme, type Theme } from "../hooks/useTheme.js";
 import { DeviceViewport } from "../components/DeviceViewport.js";
 import { ChatPane } from "../components/ChatPane.js";
+import { Typewriter } from "../components/Typewriter.js";
+import { resolveProfile, type DeviceProfile } from "../lib/deviceProfiles.js";
 import type { LabConnection, LabState } from "../lib/connection.js";
 
 function useNow(intervalMs: number): number {
@@ -75,19 +77,95 @@ function PoolPill({ state }: { state: LabState }) {
   );
 }
 
-/** Original, generic phone shell — bezel, camera dot, side keys, home bar. */
-function Phone({ children }: { children: ReactNode }) {
+/** Original phone shell — bezel, camera cutout, side keys, home bar. The
+ *  screen aspect ratio, corner radius, and camera placement follow the device
+ *  profile so different Pixel models read as different phones. */
+function Phone({
+  profile,
+  children,
+}: {
+  profile: DeviceProfile;
+  children: ReactNode;
+}) {
   return (
     <div className="phone">
       <span className="phone-key phone-power" />
       <span className="phone-key phone-vol-up" />
       <span className="phone-key phone-vol-dn" />
-      <div className="phone-screen">
-        <div className="phone-status">
-          <span className="phone-cam" />
-        </div>
+      <div
+        className="phone-screen"
+        style={{ aspectRatio: profile.aspect, borderRadius: profile.radius }}
+      >
+        {profile.camera !== "none" && (
+          <div className={`phone-status cam-${profile.camera}`}>
+            <span className="phone-cam" />
+          </div>
+        )}
         {children}
         <div className="phone-home" />
+      </div>
+    </div>
+  );
+}
+
+const DEMO_TILES = [
+  { g: "⚙", n: "Settings" },
+  { g: "◉", n: "Camera" },
+  { g: "◷", n: "Clock" },
+  { g: "✉", n: "Mail" },
+  { g: "☎", n: "Phone" },
+  { g: "♪", n: "Music" },
+  { g: "◈", n: "Store" },
+  { g: "✎", n: "Notes" },
+  { g: "◍", n: "Maps" },
+];
+const DEMO_PHRASES = [
+  "open settings",
+  "swipe up",
+  "tap the camera",
+  'type "hello"',
+];
+
+/** Self-running preview: a cursor loops around a faux home screen while example
+ *  commands type out — a taste of the real console before you lease a device. */
+function PhoneDemo() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(
+      () => setI((v) => (v + 1) % DEMO_PHRASES.length),
+      2600,
+    );
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="demo">
+      <div className="demo-time">9:41</div>
+      <div className="demo-grid">
+        {DEMO_TILES.map((t, idx) => (
+          <div
+            className="demo-tile"
+            key={idx}
+            style={{ animationDelay: `${idx * 0.1}s` }}
+          >
+            <span>{t.g}</span>
+            <em>{t.n}</em>
+          </div>
+        ))}
+      </div>
+      <div className="demo-cursor" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="24" height="24">
+          <path
+            d="M5 3l14 8-6 1.5L10 20 5 3z"
+            fill="#fff"
+            stroke="#111"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </div>
+      <div className="demo-cmd">
+        <span className="demo-prompt">›</span>
+        <Typewriter key={i} text={DEMO_PHRASES[i]!} speed={45} />
       </div>
     </div>
   );
@@ -204,17 +282,8 @@ function Landing({
         </div>
 
         <div className="hero-visual">
-          <Phone>
-            <div className="phone-poster">
-              <div className="poster-grid">
-                {["◎", "✎", "⇧", "⌂", "◐", "✦", "▷", "⚑", "◈"].map((g, i) => (
-                  <span key={i} style={{ animationDelay: `${i * 0.12}s` }}>
-                    {g}
-                  </span>
-                ))}
-              </div>
-              <p className="poster-cap">tap · swipe · type · launch</p>
-            </div>
+          <Phone profile={resolveProfile(1080, 2400)}>
+            <PhoneDemo />
           </Phone>
         </div>
       </main>
@@ -245,6 +314,7 @@ function Workspace({
 }) {
   const now = useNow(1000);
   const session = state.session!;
+  const profile = resolveProfile(session.device.width, session.device.height);
   return (
     <div className="workspace">
       <header className="ws-bar">
@@ -253,7 +323,8 @@ function Workspace({
           <span className="brand-name">Device Lab</span>
         </div>
         <div className="ws-meta">
-          <span className="ws-device">{session.device.deviceId}</span>
+          <span className="ws-device">{profile.name}</span>
+          <span className="ws-stat">{profile.resolution}</span>
           <span className="ws-stat">{state.fps} fps</span>
           {state.inputRttMs !== null && (
             <span className="ws-stat">{state.inputRttMs} ms</span>
@@ -274,7 +345,7 @@ function Workspace({
       <div className="ws-body">
         <ChatPane lab={lab} sessionKey={session.sessionId} />
         <div className="ws-stage">
-          <Phone>
+          <Phone profile={profile}>
             <DeviceViewport
               lab={lab}
               deviceWidth={session.device.width}
