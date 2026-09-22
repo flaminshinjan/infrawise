@@ -136,10 +136,9 @@ export class LabCore {
     const discoveredSerials = new Set(discovered.map((d) => d.adbSerial));
     for (const serial of this.config.deviceSerials) {
       const existing = await this.store.getDevice(serial);
-      if (existing) continue; // reconcile handles state repair
       const online = discoveredSerials.has(serial);
-      let width = 720;
-      let height = 1280;
+      let width = existing?.width ?? 720;
+      let height = existing?.height ?? 1280;
       if (online) {
         try {
           const info = await this.adapter.displayInfo({
@@ -151,6 +150,17 @@ export class LabCore {
         } catch {
           // registered but unreadable -> starts OFFLINE below
         }
+      }
+      if (existing) {
+        // Refresh dimensions in case the device's resolution changed (e.g. a
+        // new Pixel profile), without disturbing its state/session binding.
+        if (existing.width !== width || existing.height !== height) {
+          existing.width = width;
+          existing.height = height;
+          await this.store.setDevice(existing);
+          this.log.info({ event: "device_dims_refreshed", deviceId: serial, width, height });
+        }
+        continue; // reconcile handles state repair
       }
       const device: Device = {
         id: serial,
