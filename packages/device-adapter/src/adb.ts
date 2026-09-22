@@ -26,6 +26,10 @@ const FFMPEG = process.env.FFMPEG_PATH ?? "ffmpeg";
 const KEYCODES = { BACK: "4", HOME: "3" } as const;
 /** screenrecord hard-caps a single recording; we restart before it ends. */
 const SCREENRECORD_SEGMENT_SECONDS = 175;
+/** how often the keepalive checks whether the H.264 stream has gone quiet */
+const KEEPALIVE_INTERVAL_MS = 500;
+/** send a screencap once the stream has emitted no frame for this long */
+const KEEPALIVE_IDLE_MS = 900;
 
 export interface AdbAdapterOptions {
   /** package to force-stop during cleanup, if any */
@@ -237,6 +241,7 @@ async function startScreenrecordStream(
   let stopped = false;
   let adbProc: ChildProcess | null = null;
   let segmentTimer: NodeJS.Timeout | null = null;
+  let keepaliveTimer: NodeJS.Timeout | null = null;
 
   // NOTE: low-latency flags (-fflags nobuffer, -flags low_delay, -fps_mode
   // passthrough) silently produce zero output frames for a raw H.264 pipe on
@@ -261,7 +266,9 @@ async function startScreenrecordStream(
   ]);
   ffmpeg.stderr?.on("data", () => void 0);
 
+  let lastFrameAt = Date.now();
   const parser = new JpegStreamParser((data) => {
+    lastFrameAt = Date.now();
     onFrame({
       codec: "jpeg",
       width: display.width,
@@ -355,12 +362,43 @@ async function startScreenrecordStream(
     (SCREENRECORD_SEGMENT_SECONDS - 5) * 1000,
   );
 
+  // Adaptive keepalive: screenrecord only emits H.264 frames when the screen
+  // content changes, so an idle screen looks frozen to the viewer. When no
+  // frame has arrived for KEEPALIVE_IDLE_MS, push a single screencap so the
+  // feed stays live (and self-heals if the H.264 path stalls). During active
+  // motion the H.264 frames keep lastFrameAt fresh, so no screencaps fire and
+  // the efficient path is used.
+  let keepaliveBusy = false;
+  keepaliveTimer = setInterval(() => {
+    if (stopped || keepaliveBusy) return;
+    if (Date.now() - lastFrameAt < KEEPALIVE_IDLE_MS) return;
+    keepaliveBusy = true;
+    adbExecBinary(device.adbSerial, ["exec-out", "screencap", "-p"], 15_000)
+      .then((png) => {
+        if (!stopped) {
+          lastFrameAt = Date.now();
+          onFrame({
+            codec: "png",
+            width: display.width,
+            height: display.height,
+            capturedAt: Date.now(),
+            data: png,
+          });
+        }
+      })
+      .catch(() => void 0)
+      .finally(() => {
+        keepaliveBusy = false;
+      });
+  }, KEEPALIVE_INTERVAL_MS);
+
   return {
     pids,
     mode: "screenrecord",
     async stop() {
       stopped = true;
       if (segmentTimer) clearInterval(segmentTimer);
+      if (keepaliveTimer) clearInterval(keepaliveTimer);
       adbProc?.kill("SIGKILL");
       ffmpeg.stdin?.end();
       ffmpeg.kill("SIGKILL");
