@@ -1,0 +1,13 @@
+# Optional: use Docker for Redis if you prefer it over a host redis-server.
+# `make infra` uses host redis-server when available and falls back to this.
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

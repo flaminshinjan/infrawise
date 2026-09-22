@@ -1,0 +1,8 @@
+node_modules
+**/node_modules
+.git
+.emulator-logs
+bench-results
+docs
+*.md
+handoff (1).md

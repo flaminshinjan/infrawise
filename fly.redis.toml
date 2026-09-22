@@ -1,0 +1,20 @@
+app = "shared-device-lab-redis"
+primary_region = "sin"
+
+[build]
+  image = "redis:7-alpine"
+
+[processes]
+  # bind both IPv4 and IPv6: Fly private networking (6PN) is IPv6-only
+  app = "sh -c 'redis-server --appendonly yes --dir /data --bind 0.0.0.0 -::* --requirepass \"$REDIS_PASSWORD\"'"
+
+# Private only: reachable at shared-device-lab-redis.internal:6379 over 6PN.
+# No [http_service]/[services] section, so nothing is exposed publicly.
+
+[mounts]
+  source = "redis_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

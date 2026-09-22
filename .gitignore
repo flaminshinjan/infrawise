@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+bench-results/
+.avd-home/
+coverage/
+.tunnel-auth
+handoff (1).md
