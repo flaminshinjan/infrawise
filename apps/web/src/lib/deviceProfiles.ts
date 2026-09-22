@@ -21,6 +21,27 @@ export interface DeviceProfile {
 }
 
 const KNOWN: Record<string, Omit<DeviceProfile, "aspect">> = {
+  // Keyed by the STREAMED resolution (half of each Pixel's real size, exact
+  // same aspect ratio); `resolution` shows the model's real full-size spec.
+  "720x1600": {
+    name: "Pixel 8",
+    resolution: "1080 × 2400",
+    camera: "center",
+    radius: 34,
+  },
+  "720x1560": {
+    name: "Pixel 4a",
+    resolution: "1080 × 2340",
+    camera: "left",
+    radius: 26,
+  },
+  "720x1440": {
+    name: "Pixel 3",
+    resolution: "1080 × 2160",
+    camera: "none",
+    radius: 22,
+  },
+  // full-size variants (local runs that skip the scaled profiles)
   "1080x2400": {
     name: "Pixel 8",
     resolution: "1080 × 2400",
@@ -38,18 +59,6 @@ const KNOWN: Record<string, Omit<DeviceProfile, "aspect">> = {
     resolution: "1080 × 2160",
     camera: "none",
     radius: 22,
-  },
-  "1440x3120": {
-    name: "Pixel 7 Pro",
-    resolution: "1440 × 3120",
-    camera: "center",
-    radius: 40,
-  },
-  "1344x2992": {
-    name: "Pixel 9 Pro XL",
-    resolution: "1344 × 2992",
-    camera: "center",
-    radius: 40,
   },
   "720x1280": {
     name: "Emulator",

@@ -9,11 +9,15 @@ set -uo pipefail
 cd "$(dirname "$0")"
 source ./env.sh
 
+# Streamed at half of each Pixel's real resolution — the ASPECT RATIO is exact
+# (so the phone shape matches the real device), but the pixel count stays light
+# enough to stream smoothly over the cloud tunnel. The UI labels each with its
+# real model + full spec. density is scaled to keep the same logical dp width.
 # serial            resolution   density   model
 profiles=(
-  "emulator-5554    1080x2400    420       Pixel 8"
-  "emulator-5556    1080x2340    443       Pixel 4a"
-  "emulator-5558    1080x2160    443       Pixel 3"
+  "emulator-5554    720x1600     280       Pixel 8"
+  "emulator-5556    720x1560     295       Pixel 4a"
+  "emulator-5558    720x1440     295       Pixel 3"
 )
 
 for row in "${profiles[@]}"; do
