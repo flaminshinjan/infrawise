@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LabConnection } from "../lib/connection.js";
+import { compileRemote } from "../lib/compile.js";
 import {
   EXAMPLE_COMMANDS,
   GRAMMAR_HELP,
@@ -21,6 +22,8 @@ interface ChatMessage {
   role: "user" | "system";
   text?: string;
   steps?: StepEntry[];
+  note?: string;
+  thinking?: boolean;
 }
 
 interface Props {
@@ -117,6 +120,26 @@ export function ChatPane({ lab, sessionKey }: Props) {
     [lab, patchMessage],
   );
 
+  const runPlan = useCallback(
+    (steps: TestStep[], note?: string) => {
+      const id = nextId++;
+      setMessages((all) => [
+        ...all,
+        {
+          id,
+          role: "system",
+          note,
+          steps: steps.map((s) => ({
+            label: s.label,
+            status: "pending" as const,
+          })),
+        },
+      ]);
+      void runSteps(id, steps);
+    },
+    [runSteps],
+  );
+
   const submit = useCallback(
     (text: string) => {
       const trimmed = text.trim();
@@ -136,33 +159,44 @@ export function ChatPane({ lab, sessionKey }: Props) {
         return;
       }
 
+      // Fast path: the deterministic parser handles common commands instantly.
       const parsed = parseCommand(trimmed);
-      if (!parsed.ok) {
-        setMessages((all) => [
-          ...all,
-          {
-            id: nextId++,
-            role: "system",
-            text: `${parsed.error} Type “help” for the full grammar, e.g. “swipe up, then tap the center”.`,
-          },
-        ]);
+      if (parsed.ok) {
+        runPlan(parsed.steps);
         return;
       }
-      const id = nextId++;
+
+      // Fallback: let the server-side LLM interpret free-form phrasing.
+      const thinkingId = nextId++;
       setMessages((all) => [
         ...all,
-        {
-          id,
-          role: "system",
-          steps: parsed.steps.map((s) => ({
-            label: s.label,
-            status: "pending" as const,
-          })),
-        },
+        { id: thinkingId, role: "system", thinking: true, text: "Thinking…" },
       ]);
-      void runSteps(id, parsed.steps);
+      setRunning(true);
+      void (async () => {
+        const result = await compileRemote(trimmed);
+        setMessages((all) => all.filter((m) => m.id !== thinkingId));
+        setRunning(false);
+        if (result.ok && result.steps.length > 0) {
+          runPlan(
+            result.steps,
+            result.note ? `AI · ${result.note}` : "interpreted by AI",
+          );
+        } else {
+          const reason =
+            result.error ?? parsed.error ?? "Didn’t understand that.";
+          setMessages((all) => [
+            ...all,
+            {
+              id: nextId++,
+              role: "system",
+              text: `${reason} Type “help” for the built-in grammar, or rephrase.`,
+            },
+          ]);
+        }
+      })();
     },
-    [running, runSteps],
+    [running, runPlan],
   );
 
   return (
@@ -177,7 +211,14 @@ export function ChatPane({ lab, sessionKey }: Props) {
       <div className="chat-scroll" ref={scrollRef}>
         {messages.map((m) => (
           <div key={m.id} className={`chat-msg ${m.role}`}>
-            {m.text && <div className="chat-bubble">{m.text}</div>}
+            {m.thinking ? (
+              <div className="chat-bubble thinking">
+                <span className="step-spinner" /> Thinking…
+              </div>
+            ) : (
+              m.text && <div className="chat-bubble">{m.text}</div>
+            )}
+            {m.note && <div className="chat-note">{m.note}</div>}
             {m.steps && (
               <div className="chat-steps">
                 {m.steps.map((s, i) => (

@@ -77,7 +77,7 @@ async function main(): Promise<void> {
     });
   });
 
-  registerRoutes(app, core, metrics, () => ready);
+  registerRoutes(app, core, metrics, () => ready, config);
 
   // Serve the built web UI when present (dev uses the Vite server + proxy).
   const webDist = path.resolve(

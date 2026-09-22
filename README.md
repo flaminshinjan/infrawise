@@ -73,14 +73,22 @@ Browser ──HTTP/WS──▶ Gateway ─▶ Scheduler ─▶ Redis (Lua, lease
 
 ## Natural-language test console
 
-Active sessions show a chat pane beside the device. Sentences like
-`open notifications, then type "hello", then press back` compile through a
-deterministic grammar (`apps/web/src/lib/nlp.ts`, unit-tested) into the same
-ordered, fenced, acknowledged input protocol the pointer uses — each step
-reports applied/rejected with the device's ack. Deliberately not a model in
-the loop: same sentence, same steps, every time — the property an agent
-planner wants from an execution layer. Floating example chips and a `help`
-grammar reference are built in.
+Active sessions show a chat pane beside the device. Sentences compile into the
+same ordered, fenced, acknowledged input protocol the pointer uses — each step
+reports applied/rejected with the device's ack — via two layers:
+
+- **Deterministic parser** (`apps/web/src/lib/nlp.ts`, unit-tested): instant,
+  free, offline. Handles taps, swipes/scrolls, typing, app launches
+  (`open settings`, `go to chrome`), keys, waits, and chained clauses. Same
+  sentence → same steps, every time.
+- **LLM fallback** (optional): when the parser can't handle free-form phrasing
+  ("scroll to the bottom then open the browser"), the request goes to a
+  server-side compiler that asks OpenAI for a plan **constrained by a strict
+  JSON schema** and **re-validated against the input protocol** before
+  anything runs. The OpenAI key lives only on the server (a Fly secret); the
+  browser never sees it, and the model can only emit actions the fenced input
+  path already accepts. Enable with `OPENAI_API_KEY`; unset, the console still
+  works via the deterministic parser.
 
 ## Session policy
 

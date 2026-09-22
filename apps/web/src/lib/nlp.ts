@@ -1,4 +1,11 @@
-import type { InputPayload, LaunchAppId, NormalizedPoint } from "@lab/protocol";
+import type {
+  InputPayload,
+  LaunchAppId,
+  NormalizedPoint,
+  TestStep,
+} from "@lab/protocol";
+
+export type { TestStep };
 
 /**
  * Natural-language → test-step compiler.
@@ -12,10 +19,6 @@ import type { InputPayload, LaunchAppId, NormalizedPoint } from "@lab/protocol";
  * deliberately forgiving about filler, politeness, and phrasing so plain
  * requests just work.
  */
-
-export type TestStep =
-  | { kind: "input"; payload: InputPayload; label: string }
-  | { kind: "wait"; ms: number; label: string };
 
 export interface ParseResult {
   ok: boolean;

@@ -55,6 +55,37 @@ export const InputPayloadSchema = z.discriminatedUnion("kind", [
 ]);
 export type InputPayload = z.infer<typeof InputPayloadSchema>;
 
+/**
+ * A compiled test step: one input command or a wait. Both the client-side
+ * parser and the server-side LLM compiler emit this shape, so the chat pane
+ * executes either identically. `label` is a short human summary for the
+ * transcript.
+ */
+export const TestStepSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("input"),
+    payload: InputPayloadSchema,
+    label: z.string().min(1).max(80),
+  }),
+  z.object({
+    kind: z.literal("wait"),
+    ms: z.number().int().min(50).max(30_000),
+    label: z.string().min(1).max(80),
+  }),
+]);
+export type TestStep = z.infer<typeof TestStepSchema>;
+
+export const CompileRequestSchema = z.object({
+  text: z.string().min(1).max(600),
+});
+export interface CompileResponse {
+  ok: boolean;
+  steps: TestStep[];
+  note?: string;
+  error?: string;
+  source: "llm";
+}
+
 export const InputCommandSchema = z.object({
   type: z.literal("input.command"),
   sessionId: z.string().max(64),

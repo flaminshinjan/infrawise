@@ -24,6 +24,9 @@ export interface LabConfig {
   inputMaxPending: number;
   /** bounded retries before a device is marked OFFLINE */
   maxDeviceFailures: number;
+  /** natural-language LLM compiler (optional; feature is off when key is empty) */
+  openaiApiKey: string;
+  openaiModel: string;
 }
 
 function intEnv(name: string, fallback: number): number {
@@ -74,6 +77,8 @@ export function loadConfig(overrides: Partial<LabConfig> = {}): LabConfig {
     inputMaxTextLength: intEnv("INPUT_MAX_TEXT_LENGTH", 512),
     inputMaxPending: intEnv("INPUT_MAX_PENDING", 32),
     maxDeviceFailures: intEnv("MAX_DEVICE_FAILURES", 3),
+    openaiApiKey: process.env.OPENAI_API_KEY ?? "",
+    openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
     ...overrides,
   };
 }

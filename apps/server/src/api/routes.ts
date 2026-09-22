@@ -1,7 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { CreateRequestSchema } from "@lab/protocol";
+import { CompileRequestSchema, CreateRequestSchema } from "@lab/protocol";
 import { z } from "zod";
 import type { LabCore } from "../core.js";
+import type { LabConfig } from "../config.js";
+import { compileWithLlm } from "../nl/compile.js";
 import type { LabMetrics } from "../telemetry/metrics.js";
 
 const TokenHeaderSchema = z.string().min(16).max(128);
@@ -32,8 +34,10 @@ export function registerRoutes(
   core: LabCore,
   metrics: LabMetrics,
   isReady: () => boolean,
+  config: LabConfig,
 ): void {
   const requestLimiter = new RateLimiter(10, 10_000);
+  const compileLimiter = new RateLimiter(20, 60_000);
 
   app.addHook("onSend", (_req, reply, payload, done) => {
     reply.header("X-Content-Type-Options", "nosniff");
@@ -123,6 +127,32 @@ export function registerRoutes(
     await core.endSession(token, params.data.id);
     // idempotent: ending an already-ended session is success
     return { ok: true };
+  });
+
+  app.post("/api/v1/compile", async (req, reply) => {
+    const token = tokenFrom(req.headers);
+    if (!token)
+      return reply.code(401).send({ error: "missing x-client-token" });
+    if (!config.openaiApiKey) {
+      return reply
+        .code(501)
+        .send({ ok: false, error: "AI compiler not enabled", source: "llm" });
+    }
+    if (!compileLimiter.allow(req.ip)) {
+      return reply
+        .code(429)
+        .send({ ok: false, error: "rate limited — slow down", source: "llm" });
+    }
+    const parsed = CompileRequestSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply
+        .code(400)
+        .send({ ok: false, error: "invalid body", source: "llm" });
+    const result = await compileWithLlm(parsed.data.text, {
+      apiKey: config.openaiApiKey,
+      model: config.openaiModel,
+    });
+    return result;
   });
 
   app.get("/api/v1/healthz", async () => ({ ok: true }));
