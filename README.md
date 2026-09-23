@@ -11,6 +11,12 @@ moment you're done.
 
 **[▶ Try the live demo →](https://shared-device-lab-web.fly.dev)**
 
+<br />
+
+<img src="docs/media/demo.gif" alt="Type a command in plain English; the cursor flies across the device and runs it" width="820" />
+
+<br /><br />
+
 `TypeScript` · `Fastify` · `Redis (Lua)` · `WebSocket` · `React + Vite` · `ADB / scrcpy` · `Fly.io`
 
 </div>
