@@ -3,7 +3,6 @@ import { useLab } from "../hooks/useLab.js";
 import { useTheme, type Theme } from "../hooks/useTheme.js";
 import { DeviceViewport } from "../components/DeviceViewport.js";
 import { ChatPane } from "../components/ChatPane.js";
-import { Typewriter } from "../components/Typewriter.js";
 import { resolveProfile, type DeviceProfile } from "../lib/deviceProfiles.js";
 import type { LabConnection, LabState } from "../lib/connection.js";
 
@@ -108,69 +107,6 @@ function Phone({
   );
 }
 
-const DEMO_TILES = [
-  { g: "⚙", n: "Settings" },
-  { g: "◉", n: "Camera" },
-  { g: "◷", n: "Clock" },
-  { g: "✉", n: "Mail" },
-  { g: "☎", n: "Phone" },
-  { g: "♪", n: "Music" },
-  { g: "◈", n: "Store" },
-  { g: "✎", n: "Notes" },
-  { g: "◍", n: "Maps" },
-];
-const DEMO_PHRASES = [
-  "open settings",
-  "swipe up",
-  "tap the camera",
-  'type "hello"',
-];
-
-/** Self-running preview: a cursor loops around a faux home screen while example
- *  commands type out — a taste of the real console before you lease a device. */
-function PhoneDemo() {
-  const [i, setI] = useState(0);
-  useEffect(() => {
-    const t = setInterval(
-      () => setI((v) => (v + 1) % DEMO_PHRASES.length),
-      2600,
-    );
-    return () => clearInterval(t);
-  }, []);
-  return (
-    <div className="demo">
-      <div className="demo-time">9:41</div>
-      <div className="demo-grid">
-        {DEMO_TILES.map((t, idx) => (
-          <div
-            className="demo-tile"
-            key={idx}
-            style={{ animationDelay: `${idx * 0.1}s` }}
-          >
-            <span>{t.g}</span>
-            <em>{t.n}</em>
-          </div>
-        ))}
-      </div>
-      <div className="demo-cursor" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="24" height="24">
-          <path
-            d="M5 3l14 8-6 1.5L10 20 5 3z"
-            fill="#fff"
-            stroke="#111"
-            strokeWidth="1.2"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </div>
-      <div className="demo-cmd">
-        <span className="demo-prompt">›</span>
-        <Typewriter key={i} text={DEMO_PHRASES[i]!} speed={45} />
-      </div>
-    </div>
-  );
-}
-
 function Landing({
   lab,
   state,
@@ -198,95 +134,130 @@ function Landing({
         </div>
       </nav>
 
-      <main className="hero">
-        <div className="hero-copy">
-          <span className="eyebrow">execution substrate for agentic QA</span>
-          <h1>
-            Drive real Android
-            <br />
-            devices <span className="grad">in plain English.</span>
-          </h1>
-          <p className="hero-sub">
-            Lease a live emulator, watch it stream into a phone in your browser,
-            and run tests by typing what you want — a cursor flies across the
-            screen and does it. Fair queue, crash-safe leases, the next tester
-            served automatically.
-          </p>
+      <main className="hero-text">
+        <span className="eyebrow">execution substrate for agentic QA</span>
+        <h1>
+          Real Android devices,
+          <br />
+          <span className="grad">leased fairly, tested in plain English.</span>
+        </h1>
+        <p className="hero-sub">
+          Request a live emulator and get an exclusive, crash-safe lease streamed
+          to your browser. Drive it by touch, or type what you want — an on-screen
+          cursor flies across the device and does it. A fair FIFO queue hands the
+          device to the next tester the moment you’re done.
+        </p>
 
-          <div className="hero-action">
-            {state.phase === "idle" && (
-              <>
-                <button
-                  className="cta"
-                  onClick={() => void lab.requestDevice()}
-                >
-                  Request a device →
-                </button>
-                <span className="cta-note">
-                  FIFO queue · 10-min lease · no sign-up
+        <div className="hero-action center">
+          {state.phase === "idle" && (
+            <>
+              <button className="cta" onClick={() => void lab.requestDevice()}>
+                Request a device →
+              </button>
+              <span className="cta-note">
+                FIFO queue · 10-minute lease · no sign-up
+              </span>
+            </>
+          )}
+          {state.phase === "waiting" && (
+            <div className="queue-card">
+              <div className="queue-num">{state.position ?? "…"}</div>
+              <div className="queue-info">
+                <strong>
+                  {state.position === 1
+                    ? "You’re next"
+                    : `${(state.position ?? 1) - 1} ahead of you`}
+                </strong>
+                <span>
+                  waiting{" "}
+                  {state.enqueuedAt ? formatDuration(now - state.enqueuedAt) : "…"}{" "}
+                  · survives refresh
                 </span>
-              </>
-            )}
-            {state.phase === "waiting" && (
-              <div className="queue-card">
-                <div className="queue-num">{state.position ?? "…"}</div>
-                <div className="queue-info">
-                  <strong>
-                    {state.position === 1
-                      ? "You’re next"
-                      : `${(state.position ?? 1) - 1} ahead of you`}
-                  </strong>
-                  <span>
-                    waiting{" "}
-                    {state.enqueuedAt
-                      ? formatDuration(now - state.enqueuedAt)
-                      : "…"}{" "}
-                    · survives refresh
-                  </span>
-                </div>
-                <button
-                  className="ghost"
-                  onClick={() => void lab.cancelRequest()}
-                >
-                  Leave
-                </button>
               </div>
-            )}
-            {state.phase === "reserved" && (
-              <div className="queue-card">
-                <span className="spinner" />
-                <div className="queue-info">
-                  <strong>Device reserved</strong>
-                  <span>claiming your session…</span>
-                </div>
+              <button className="ghost" onClick={() => void lab.cancelRequest()}>
+                Leave
+              </button>
+            </div>
+          )}
+          {state.phase === "reserved" && (
+            <div className="queue-card">
+              <span className="spinner" />
+              <div className="queue-info">
+                <strong>Device reserved</strong>
+                <span>claiming your session…</span>
               </div>
-            )}
-            {state.phase === "ended" && (
-              <div className="queue-card">
-                <div className="queue-info">
-                  <strong>Session ended</strong>
-                  <span>reason: {state.endedReason ?? "unknown"}</span>
-                </div>
-                <button
-                  className="cta small"
-                  onClick={() => void lab.requestDevice()}
-                >
-                  Again →
-                </button>
+            </div>
+          )}
+          {state.phase === "ended" && (
+            <div className="queue-card">
+              <div className="queue-info">
+                <strong>Session ended</strong>
+                <span>reason: {state.endedReason ?? "unknown"}</span>
               </div>
-            )}
-          </div>
-          {state.lastError && (
-            <div className="hero-error">{state.lastError}</div>
+              <button className="cta small" onClick={() => void lab.requestDevice()}>
+                Again →
+              </button>
+            </div>
           )}
         </div>
+        {state.lastError && <div className="hero-error">{state.lastError}</div>}
 
-        <div className="hero-visual">
-          <Phone profile={resolveProfile(1080, 2400)}>
-            <PhoneDemo />
-          </Phone>
+        <div className="cmd-strip">
+          {["open settings", "swipe up, then tap the center", 'type "hello"', "open the camera"].map(
+            (c) => (
+              <code key={c}>{c}</code>
+            ),
+          )}
         </div>
       </main>
+
+      <section className="steps">
+        <div className="step">
+          <span className="step-n">01</span>
+          <h3>Request &amp; lease</h3>
+          <p>
+            One atomic Redis transaction assigns a device — two clients can never
+            own the same one. If all three are busy you join a live FIFO queue.
+          </p>
+        </div>
+        <div className="step">
+          <span className="step-n">02</span>
+          <h3>Drive it live</h3>
+          <p>
+            The device streams to your browser. Tap and swipe directly, or type
+            commands in plain language — taps, swipes, typing, app launches — and
+            watch the cursor execute each one in order.
+          </p>
+        </div>
+        <div className="step">
+          <span className="step-n">03</span>
+          <h3>Release &amp; recover</h3>
+          <p>
+            End the session, refresh, or crash the server — leases expire, devices
+            are cleaned before reassignment, and the next tester is served
+            automatically.
+          </p>
+        </div>
+      </section>
+
+      <section className="creds">
+        <div className="cred">
+          <strong>Atomic, fair allocation</strong>
+          <p>Lua-scripted leases + fencing tokens. Proven by a race test: 8 allocators, 1 device, exactly one owner.</p>
+        </div>
+        <div className="cred">
+          <strong>Crash-safe by design</strong>
+          <p>TTL leases, a reaper, and startup reconciliation survive <code>kill&nbsp;-9</code> with no shutdown hooks.</p>
+        </div>
+        <div className="cred">
+          <strong>Natural-language testing</strong>
+          <p>A deterministic parser plus an LLM fallback compile English into the same ordered, fenced input protocol.</p>
+        </div>
+        <div className="cred">
+          <strong>Three real Pixels</strong>
+          <p>Pixel 8, 4a and 3 — distinct resolutions and frames — streamed with latest-frame-wins backpressure.</p>
+        </div>
+      </section>
 
       <footer className="footer">
         <span>33 fps live stream</span>
@@ -294,6 +265,8 @@ function Landing({
         <span>97 ms tap-to-pixel</span>
         <span className="sep" />
         <span>11 ms allocation</span>
+        <span className="sep" />
+        <span>45 automated tests</span>
         <span className="sep" />
         <span>measured, not estimated</span>
       </footer>

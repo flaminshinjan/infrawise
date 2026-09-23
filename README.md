@@ -1,183 +1,139 @@
-# Shared Device Lab
+<div align="center">
 
-Three Android emulators. Fair leases. Live control. A miniature execution
-substrate for mobile QA: browser users today, agents through the same
-scheduler API next, physical devices behind the same adapter after that.
+# 📱 Shared Device Lab
 
-**Live demo:** https://shared-device-lab-web.fly.dev (frontend, API, Redis and
-device tunnel run as four separate Fly apps; devices attach from any machine
-via `scripts/attach-devices-to-cloud.sh`).
+### Real Android devices — leased fairly, tested in plain English.
 
-> I chose Android because ADB provides the same core discovery and control
-> surface for emulators and USB-connected physical devices, letting the
-> scheduler, leases, input ordering, and recovery design transfer directly to
-> a physical device lab. The cloud deployment already exercises exactly that
-> path: the hosted scheduler controls this laptop's emulators over TCP ADB
-> through a reverse tunnel, identically to how it would drive a rack of
-> phones.
+Request a live Android emulator, get an **exclusive, crash-safe lease** streamed to your
+browser, and drive it by touch **or by typing what you want** — an on-screen cursor flies
+across the device and does it. A fair FIFO queue hands the device to the next tester the
+moment you're done.
 
-## Quick start
+**[▶ Try the live demo →](https://shared-device-lab-web.fly.dev)**
+
+`TypeScript` · `Fastify` · `Redis (Lua)` · `WebSocket` · `React + Vite` · `ADB / scrcpy` · `Fly.io`
+
+</div>
+
+---
+
+> A miniature **execution substrate for mobile QA**: a browser user leases a device today;
+> a QA agent leases one through the same scheduler API next; a physical-device adapter
+> replaces the emulator adapter later without touching queueing, leases, input ordering, or
+> recovery. A device farm is a distributed ownership system with video attached — not a
+> screen-sharing demo.
+
+## ✨ Try it in 60 seconds (no install)
+
+1. Open **[shared-device-lab-web.fly.dev](https://shared-device-lab-web.fly.dev)** in a few
+   browser windows.
+2. Hit **Request a device** in three windows → each gets a *different Pixel* (8, 4a, 3).
+3. In a fourth window, **Request a device** → watch your live queue position.
+4. In an active window, open the **test console** and type:
+   `open settings, then swipe up, then tap the center` — watch the cursor execute each step.
+5. **End** one session → the queued window is served automatically.
+
+> Devices are this laptop's emulators, attached to the cloud over a reverse tunnel — the
+> same mechanism a physical device farm would use. If the pool shows `0 offline` it's live;
+> if a device is offline, the lab owner just needs to reconnect the tunnel.
+
+## 🚀 Run it locally
 
 ```bash
-make doctor      # verifies node, pnpm, redis, adb, emulator, ffmpeg
+make doctor      # verify node, pnpm, redis, adb, emulator, ffmpeg
 make setup       # pnpm install + .env
 make avds        # create three AVDs (one-time)
 make emulators   # boot all three headless, wait for full boot
+make devices     # give each emulator a real Pixel profile (8 / 4a / 3)
 make infra       # start Redis
-make dev         # server :4000, web :5173
+make dev         # server on :4000, web on :5173
 ```
 
-Then open http://localhost:5173 in four browser windows — see
-[docs/DEMO.md](docs/DEMO.md) for the full walkthrough, `make demo` for the
-scripted, asserting version of the four-client flow, and `make fault-demo`
-for the kill -9 recovery scenario.
+Then open **http://localhost:5173** in four windows. See **[docs/DEMO.md](docs/DEMO.md)** for
+the full walkthrough, `make demo` for the scripted four-client flow, and `make fault-demo`
+for the `kill -9` recovery scenario.
 
-## Architecture
+## 🧠 What makes it real
 
-All correctness-bearing state (queue, sessions, device ownership, fencing
-tokens, leases, events) lives in Redis, and every multi-key transition is a
-single Lua script — atomic allocation, atomic termination, atomic health
-transitions. The Node process holds only rebuildable runtime: sockets,
-capture subprocesses, input executors. Modules are separated along the seams
-that would become process boundaries in a real lab: gateway, scheduler,
-session service, device registry, ADB adapter (its own package, swappable for
-a physical-device adapter), stream fan-out, ordered input executor, cleanup
-worker, reaper, telemetry. Details in [docs/DESIGN.md](docs/DESIGN.md).
+| | |
+|---|---|
+| **Atomic, fair allocation** | One Lua transaction pops a device + the oldest waiter + bumps a fencing token. Two allocators **cannot** double-assign — proven by a race test (8 allocators, 1 device, exactly one owner). |
+| **Crash-safe by design** | TTL leases + a reaper + startup reconciliation survive `kill -9` with **no shutdown hooks**. Refreshing your tab keeps your session. |
+| **Ordered, fenced input** | Strict sequence numbers, serial per-session execution, ACK-after-ADB, dedupe, gap rejection. A stale-fence command from a dead session touches the device **zero** times. |
+| **Natural-language console** | A deterministic parser (instant, offline) with an **LLM fallback** compiles English into the *same* ordered input protocol — every LLM step re-validated before it runs. |
+| **Cleanup before reuse** | Devices are cleaned + health-checked before reassignment; repeated failure marks them `OFFLINE` instead of serving them dirty. |
+| **Three real Pixels** | Pixel 8 (20:9), Pixel 4a (19.5:9), Pixel 3 (18:9) — distinct resolutions, frames, and camera cutouts — with latest-frame-wins stream backpressure. |
+
+## 🏗 Architecture
+
+All correctness-bearing state (queue, sessions, ownership, fencing tokens, leases, events)
+lives in **Redis**, and every multi-key transition is a single **Lua script** — atomic
+allocation, termination, and health transitions. The Node process holds only rebuildable
+runtime: sockets, capture subprocesses, input executors.
 
 ```
-Browser ──HTTP/WS──▶ Gateway ─▶ Scheduler ─▶ Redis (Lua, leases, fences)
+Browser ──HTTP/WS──▶ Gateway ─▶ Scheduler ─▶ Redis (Lua · leases · fences)
                         │                        ▲
-                        ├─ Input executor        │ reaper / reconciler
+                        ├─ NL compiler (LLM)      │ reaper / reconciler
+                        ├─ Ordered input executor │
                         └─ Stream fan-out ─▶ ADB adapter ─▶ 3 emulators
 ```
 
-## Correctness guarantees
+Modules are split along the seams that would become process boundaries in a real farm:
+gateway, scheduler, session service, device registry, ADB adapter (its own package,
+swappable for physical devices), stream fan-out, input executor, cleanup worker, reaper,
+telemetry. Full write-up in **[docs/DESIGN.md](docs/DESIGN.md)**.
 
-- **One owner per device, ever.** Allocation pops the device and binds the
-  session inside one Lua script; concurrent allocators cannot double-assign
-  (proven by a concurrency test hammering one device with 8 allocators).
-- **FIFO with deterministic tie-breaks**; cancelled/expired heads are skipped
-  atomically and can never block the queue.
-- **Fencing tokens.** Every assignment increments the device fence; every
-  input command re-validates ownership + fence against Redis immediately
-  before touching ADB. Stale-fence commands are rejected with zero adapter
-  invocations.
-- **Ordered, deduplicated input.** Strict seq admission, serial execution,
-  ACK after ADB completion, duplicates never re-execute, gaps reject with
-  `expectedSeq`.
-- **Cleanup before reassignment, always** — including after crashes; cleanup
-  is idempotent and bounded, and repeated failure takes the device OFFLINE
-  instead of serving it dirty.
-- **kill -9 safe.** TTL leases + reaper + startup reconciliation; no shutdown
-  hooks are load-bearing. Run `make fault-demo`.
+## 📊 Measured performance
 
-## Natural-language test console
+Real numbers from `make benchmark` (never estimated). Apple M5 Pro, three Android 14 AVDs.
 
-Active sessions show a chat pane beside the device. Sentences compile into the
-same ordered, fenced, acknowledged input protocol the pointer uses — each step
-reports applied/rejected with the device's ack — via two layers:
+| Metric | 1 stream | 3 streams |
+|---|---:|---:|
+| Delivered FPS (under motion) | **33** | **27** |
+| Tap → visible-change p50 | **97 ms** | 117 ms |
+| Tap → visible-change p95 | 132 ms | 161 ms |
+| Input RTT (ADB apply) p50 | 296 ms | 302 ms |
+| Allocation time | 11 ms | — |
+| Server CPU / RSS (median) | 1.4% / 86 MB | 2.7% / 100 MB |
 
-- **Deterministic parser** (`apps/web/src/lib/nlp.ts`, unit-tested): instant,
-  free, offline. Handles taps, swipes/scrolls, typing, app launches
-  (`open settings`, `go to chrome`), keys, waits, and chained clauses. Same
-  sentence → same steps, every time.
-- **LLM fallback** (optional): when the parser can't handle free-form phrasing
-  ("scroll to the bottom then open the browser"), the request goes to a
-  server-side compiler that asks OpenAI for a plan **constrained by a strict
-  JSON schema** and **re-validated against the input protocol** before
-  anything runs. The OpenAI key lives only on the server (a Fly secret); the
-  browser never sees it, and the model can only emit actions the fenced input
-  path already accepts. Enable with `OPENAI_API_KEY`; unset, the console still
-  works via the deterministic parser.
+Peak is ~60 fps under continuous animation; the stream is change-driven so idle screens
+cost ~0. **Bottleneck:** the `screenrecord` → ffmpeg MJPEG transcode. **Highest-leverage
+fix:** ship H.264 to the browser and decode with WebCodecs, deleting the re-encode — see
+[docs/ANSWERS.md](docs/ANSWERS.md).
 
-## Session policy
+## 🎬 Demo & docs
 
-Refresh reconnects to the same session or queue entry via an opaque token in
-`sessionStorage`. Disconnects get a 15 s grace before the session expires and
-the device is cleaned. Reservations must be claimed within 10 s (the browser
-does this automatically). Maximum session duration is 10 minutes, enforced
-server-side. All timings are env-configurable (`.env.example`).
+- **[docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)** — shot-by-shot 4-minute demo-video script
+- **[docs/DEMO.md](docs/DEMO.md)** — reviewer walkthrough + commands
+- **[docs/ANSWERS.md](docs/ANSWERS.md)** — the four assignment questions, answered
+- **[docs/DESIGN.md](docs/DESIGN.md)** — architecture & state machines
 
-## Streaming policy
+## 🔒 Notes
 
-`adb screenrecord` H.264 → one ffmpeg per device → MJPEG frames → binary
-WebSocket with a 24-byte header (codec, dims, seq, fence, capture time).
-**Latest-frame-wins backpressure:** a slow client holds at most one pending
-frame; newer frames replace it and replaced frames are counted
-(`lab_stream_frames_dropped_total`). Control messages never queue behind
-video. The stream is change-driven (idle screen ≈ 0 fps, which is why FPS is
-measured under motion); a one-shot screencap primes the first frame so
-viewers see the screen instantly.
+- Streams render at half each Pixel's real resolution (exact aspect ratio) so three feeds
+  stay smooth over the cloud tunnel; the UI labels each with its real model + full spec.
+- The LLM key is a **server-side Fly secret** — never shipped to the browser; the feature
+  is optional (unset key → deterministic parser only).
+- 45 automated tests: allocation races, FIFO/starvation, input order/fencing,
+  reconnect/timeout, crash recovery, backpressure, coordinate mapping, NL parsing.
+  `make test`.
 
-## Measured performance
-
-| Metric | 1 stream | 3 streams | Test environment |
-|---|---:|---:|---|
-| Delivered FPS (motion) | 33.3 | 27 | Apple M5 Pro, macOS 26.6.1 |
-| Encode-out->client p50* | 0 ms | 0 ms | 3x Android 14 (API 34) arm64 AVD, 720x1280@320dpi, swiftshader, headless |
-| Encode-out->client p95* | 2 ms | 1 ms | same |
-| Tap->visible-change p50 | 97 ms | 117 ms | 30/15 samples |
-| Tap->visible-change p95 | 132 ms | 161 ms | same |
-| Input RTT p50 (ADB apply) | 296 ms | 302 ms | same |
-| Server CPU (median) | 1.4% | 2.7% | server process only |
-| Server RSS (median) | 86 MB | 100 MB | same |
-| Allocation time | 11 ms | — | request -> reservation |
-
-\* frame timestamps are applied when ffmpeg emits the JPEG, so this column
-measures server-egress to client-receive on the same host; the full
-capture-to-glass cost is captured by the tap-to-visible-change rows.
-Peak delivered FPS under continuous animation is ~60 (measured in earlier
-unpaced runs); the table's motion pacing mimics realistic interaction, where
-the change-driven stream idles between gestures. Tap-to-visible-change being
-faster than input RTT is expected: the ACK waits for `adb shell input` to
-finish the whole gesture, while pixels start changing as it begins.
-
-Methodology and caveats: `scripts/benchmark.ts` (all numbers are measured by
-`make benchmark`, never estimated). Tap-to-visible-change exploits the
-change-driven encoder: on an idle screen, the first frame captured after an
-input is that input's visual effect; the number excludes browser decode/paint
-(~10–30 ms). Input RTT includes real `adb shell input` execution, which
-dominates it.
-
-**Where it falls over:** the capture→encode pipeline. `screenrecord` + the
-ffmpeg H.264→MJPEG re-encode add the bulk of visible latency and the per-
-stream CPU that scales linearly with stream count; ADB `input` latency
-(~300 ms) bounds input responsiveness. The single highest-leverage change is
-shipping the H.264 stream to the browser and decoding with WebCodecs,
-deleting the re-encode hop — see
-[docs/ANSWERS.md](docs/ANSWERS.md) for the full argument.
-
-## Known limits
-
-- Emulators are locked portrait; rotation handling exists in the mapping
-  layer (unit-tested) but is not exercised end-to-end.
-- `input text` supports printable ASCII only (ADB limitation) — rejected
-  explicitly otherwise. Text arrives as one ordered command; paste works.
-- Streaming is MJPEG over WS, not H.264/WebRTC — a deliberate 48-hour
-  tradeoff, measured and documented rather than half-built.
-- Single orchestrator process. The design (fences, Lua atomicity, leases)
-  already tolerates multiple allocators; running them was out of scope.
-- Redis outage: new allocations and ownership-requiring commands refuse
-  rather than guess; active streams keep flowing.
-
-## Docs
-
-- [docs/ANSWERS.md](docs/ANSWERS.md) — the four assignment questions
-- [docs/DESIGN.md](docs/DESIGN.md) — architecture and state machines
-- [docs/DEMO.md](docs/DEMO.md) — demo walkthrough + reviewer script
-- `tests/` — allocation races, FIFO/starvation, input order/fencing,
-  reconnect/timeout, crash recovery, backpressure, coordinate mapping
-  (35 tests; `make test`)
-
-## Cloud deployment (Fly.io)
+## ☁️ Deploy (Fly.io)
 
 | App | Role |
 |---|---|
 | `shared-device-lab-web` | static web UI (nginx) |
 | `shared-device-lab-api` | orchestrator (Node + adb + ffmpeg) |
-| `shared-device-lab-redis` | private Redis with volume + auth |
+| `shared-device-lab-redis` | private Redis (volume + auth) |
 | `shared-device-lab-tunnel` | chisel reverse tunnel for device attach |
 
-`make deploy` redeploys all of them. Devices join the hosted lab from any
-machine running `scripts/attach-devices-to-cloud.sh` — the same mechanism a
-physical device farm would use.
+`make deploy` builds and ships all of them. Devices join from any machine running
+`scripts/attach-devices-to-cloud.sh`.
+
+---
+
+<div align="center">
+<sub>Built as a take-home. Correctness, observable behavior, crash recovery, and a clean
+demo over decorative features.</sub>
+</div>

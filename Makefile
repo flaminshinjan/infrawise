@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: doctor setup avds emulators infra dev test smoke benchmark demo fault-demo down deploy
+.PHONY: doctor setup avds emulators devices infra dev test smoke benchmark demo fault-demo down deploy
 
 doctor:
 	./scripts/doctor.sh
@@ -15,6 +15,9 @@ avds:
 
 emulators:
 	./scripts/start-emulators.sh
+
+devices:
+	./scripts/apply-device-profiles.sh
 
 infra:
 	@if pgrep -x redis-server >/dev/null; then \
